@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ETLConfig } from '../types';
 import { Settings, Plus, Trash2, RotateCcw, AlertCircle, Database } from 'lucide-react';
-import { SheetsConfig } from '../utils/googleSheetsSync';
+import { SheetsConfig, pullBankMappingsFromGoogleSheet, pushBankMappingsToGoogleSheet } from '../utils/googleSheetsSync';
 
 const LOCAL_STORAGE_KEY = 'accounting_etl_config_v1';
 
@@ -63,6 +63,32 @@ export default function ConfigPanel({ onConfigChange, sheetsConfig, onSheetsConf
     }
   }, []);
 
+  // Auto-fetch bank mappings from Google Sheets on mount (or when webAppUrl becomes available)
+  useEffect(() => {
+    if (!sheetsConfig.webAppUrl) return;
+    
+    const fetchMappings = async () => {
+      try {
+        const fetched = await pullBankMappingsFromGoogleSheet(sheetsConfig.webAppUrl);
+        if (fetched && Object.keys(fetched).length > 0) {
+          setConfig(prev => {
+            const updated = {
+              ...prev,
+              bankMappings: fetched
+            };
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+            onConfigChange(updated);
+            return updated;
+          });
+        }
+      } catch (err) {
+        console.error('Failed to auto-fetch bank mappings:', err);
+      }
+    };
+    
+    fetchMappings();
+  }, [sheetsConfig.webAppUrl]);
+
   // Sync to parent and save to local storage when config changes
   const saveConfig = (updated: ETLConfig) => {
     setConfig(updated);
@@ -90,6 +116,13 @@ export default function ConfigPanel({ onConfigChange, sheetsConfig, onSheetsConf
       bankMappings: updatedMappings
     };
     saveConfig(updated);
+
+    // Sync to Google Sheet (asynchronous)
+    if (sheetsConfig.webAppUrl) {
+      pushBankMappingsToGoogleSheet(sheetsConfig.webAppUrl, updatedMappings, sheetsConfig.userName)
+        .catch(err => console.error("Failed to sync new bank mapping:", err));
+    }
+    
     setNewBank('');
     setNewAccount('');
   };
@@ -102,11 +135,23 @@ export default function ConfigPanel({ onConfigChange, sheetsConfig, onSheetsConf
       bankMappings: updatedMappings
     };
     saveConfig(updated);
+
+    // Sync to Google Sheet (asynchronous)
+    if (sheetsConfig.webAppUrl) {
+      pushBankMappingsToGoogleSheet(sheetsConfig.webAppUrl, updatedMappings, sheetsConfig.userName)
+        .catch(err => console.error("Failed to sync after removing bank mapping:", err));
+    }
   };
 
   const handleReset = () => {
     if (window.confirm('Bạn có chắc chắn muốn đặt lại toàn bộ cấu hình về mặc định không?')) {
       saveConfig(DEFAULT_CONFIG);
+
+      // Sync to Google Sheet (asynchronous)
+      if (sheetsConfig.webAppUrl) {
+        pushBankMappingsToGoogleSheet(sheetsConfig.webAppUrl, DEFAULT_CONFIG.bankMappings, sheetsConfig.userName)
+          .catch(err => console.error("Failed to sync default bank mappings:", err));
+      }
     }
   };
 

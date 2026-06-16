@@ -121,3 +121,41 @@ export function getPortalUserEmail(): Promise<string | null> {
     }
   });
 }
+
+export async function pullBankMappingsFromGoogleSheet(webAppUrl: string): Promise<Record<string, string> | null> {
+  if (!webAppUrl || (!webAppUrl.startsWith("http://") && !webAppUrl.startsWith("https://"))) return null;
+  try {
+    const response = await fetch(`${webAppUrl}?action=get_bank_mappings`);
+    if (response.ok) {
+      const result = await response.json();
+      if (result && result.success && result.mappings) {
+        return result.mappings;
+      }
+    }
+  } catch (err) {
+    console.error("Lỗi khi nạp Bản đồ tài khoản nợ từ Google Sheets:", err);
+  }
+  return null;
+}
+
+export async function pushBankMappingsToGoogleSheet(
+  webAppUrl: string,
+  mappings: Record<string, string>,
+  userEmail: string
+): Promise<void> {
+  if (!webAppUrl || (!webAppUrl.startsWith("http://") && !webAppUrl.startsWith("https://"))) return;
+  try {
+    await fetch(webAppUrl, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({
+        action: "save_bank_mappings",
+        mappings,
+        user: userEmail
+      })
+    });
+  } catch (err) {
+    console.error("Lỗi khi đồng bộ Bản đồ tài khoản nợ lên Google Sheets:", err);
+  }
+}

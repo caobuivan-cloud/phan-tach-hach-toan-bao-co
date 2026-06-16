@@ -8,6 +8,11 @@
 
 ## 2026-06-16
 
+### feat(sync): đồng bộ Bản đồ tài khoản nợ (Bank Mappings) lên Google Sheets
+- Bổ sung các hàm tiện ích `pullBankMappingsFromGoogleSheet` và `pushBankMappingsToGoogleSheet` tại `googleSheetsSync.ts` để đồng bộ cấu hình ngân hàng.
+- Tích hợp vòng đời nạp tự động khi Sidebar component mount và gọi API cập nhật bất đồng bộ lên Google Sheets Web App mỗi khi người dùng Thêm/Xóa/Reset ánh xạ ngân hàng trên `ConfigPanel.tsx`.
+- Cung cấp mã nguồn nâng cấp Google Apps Script mẫu tại `.agent/history/features/2026-06-16-bank-mappings-sync/google-apps-script.js` hỗ trợ tự tạo sheet `"BankMappings"`, ghi đè dữ liệu và ghi log hệ thống.
+
 ### fix(logging): sửa lỗi lấy email và ghi log hoạt động lên Google Sheets
 - Bổ sung cơ chế parse JSON string khi đọc dữ liệu IndexedDB của Firebase và cơ chế fallback tự động quét email từ URL parameter/hash (`email=...`) cùng bộ nhớ `localStorage`/`sessionStorage` của Iframe và cửa sổ cha `window.parent`.
 - Thiết lập `mode: "no-cors"` khi gửi POST request tới Web App URL để tránh lỗi CORS do cơ chế chuyển hướng (302 Redirect) của Google Script.
