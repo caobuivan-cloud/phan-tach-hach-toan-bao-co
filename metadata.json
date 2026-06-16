@@ -1,0 +1,6 @@
+{
+  "name": "Accounting ETL Tool",
+  "description": "Hệ thống ETL tự động nhập và đối chiếu báo cáo tiền về kế toán từ nhiều file Excel.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
