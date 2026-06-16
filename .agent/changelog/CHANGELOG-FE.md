@@ -8,6 +8,10 @@
 
 ## 2026-06-16
 
+### fix(logging): sửa lỗi lấy email và ghi log hoạt động lên Google Sheets
+- Bổ sung cơ chế parse JSON string khi đọc dữ liệu IndexedDB của Firebase và cơ chế fallback tự động quét email từ URL parameter/hash (`email=...`) cùng bộ nhớ `localStorage`/`sessionStorage` của Iframe và cửa sổ cha `window.parent`.
+- Thiết lập `mode: "no-cors"` khi gửi POST request tới Web App URL để tránh lỗi CORS do cơ chế chuyển hướng (302 Redirect) của Google Script.
+
 ### feat(logging): tích hợp nhật ký hoạt động người dùng lên Google Sheets
 - Tạo tệp tin utility [googleSheetsSync.ts](file:///d:/Project_VCC/KeToanVCC/Ducuments/PhanTach_HachToan/XuLyBaoCo_Ngoc/src/utils/googleSheetsSync.ts) hỗ trợ tải/lưu cấu hình nhật ký, tự động truy vấn email người dùng từ Firebase IndexedDB và thực hiện gọi API POST bất đồng bộ (fire-and-forget).
 - Tích hợp UI cấu hình độc lập ở chân Sidebar của [ConfigPanel.tsx](file:///d:/Project_VCC/KeToanVCC/Ducuments/PhanTach_HachToan/XuLyBaoCo_Ngoc/src/components/ConfigPanel.tsx) để thiết lập URL Web App, Email và Bật/Tắt nhật ký.

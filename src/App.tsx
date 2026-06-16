@@ -26,6 +26,20 @@ export default function App() {
   useEffect(() => {
     const fetchPortalEmail = async () => {
       try {
+        // 1. Thử lấy từ URL query hoặc hash (email=...)
+        const hash = window.location.hash || window.location.search;
+        const match = hash.match(/email=([^&]+)/);
+        if (match && match[1]) {
+          const email = decodeURIComponent(match[1]);
+          setSheetsConfig(prev => {
+            const updated = { ...prev, userName: email };
+            saveSheetsConfig(updated);
+            return updated;
+          });
+          return;
+        }
+
+        // 2. Thử lấy từ portal IndexedDB
         const portalEmail = await getPortalUserEmail();
         if (portalEmail) {
           setSheetsConfig(prev => {
