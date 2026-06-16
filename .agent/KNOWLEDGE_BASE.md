@@ -22,4 +22,5 @@ Lưu trữ những **quyết định kiến trúc** quan trọng và **lý do ch
 
 ## Ongoing Decisions
 
-*(Chưa có quyết định bổ sung)*
+- 2026-06-16 **[Kiến trúc: Tách biệt cấu hình SheetsConfig khỏi ETLConfig]**. Why: Tách cấu hình nhật ký hoạt động (Google Sheets) độc lập khỏi cấu hình hạch toán nghiệp vụ (ETLConfig) để tránh việc kích hoạt chạy lại quy trình ETL khi người dùng chỉnh sửa thiết lập nhật ký ở Sidebar, từ đó tối ưu hiệu năng hiển thị và tránh lặp thao tác xử lý dữ liệu.
+

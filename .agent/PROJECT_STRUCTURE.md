@@ -25,6 +25,7 @@
 |   |   |-- FileDropzone.tsx
 |   |-- utils/
 |   |   |-- etl.ts
+|   |   |-- googleSheetsSync.ts
 |   |-- App.tsx
 |   |-- index.css
 |   |-- main.tsx
@@ -55,6 +56,7 @@
 | File Uploader | `src/components/FileDropzone.tsx` | Nhận tệp tải lên qua kéo thả, đọc nội dung thô và lưu vào state | `xlsx` (SheetJS) |
 | Configuration | `src/components/ConfigPanel.tsx` | Cung cấp UI cập nhật cấu hình hạch toán và map tài khoản ngân hàng | `src/types.ts` |
 | Preview Table | `src/components/DataPreviewTable.tsx` | Hiển thị bảng kết quả xử lý và phân biệt cảnh báo bằng màu sắc | `lucide-react` |
+| Google Sheets Log | `src/utils/googleSheetsSync.ts` | Đồng bộ cấu hình log và bắn log bất đồng bộ lên Apps Script Web App | `indexedDB` (Firebase Local Storage) |
 
 ## 4. Config / Infra quan trọng
 
@@ -77,6 +79,7 @@
 
 - **Khi sửa UI/Giao diện/Layout**: Đọc [App.tsx](file:///d:/Project_VCC/KeToanVCC/Ducuments/PhanTach_HachToan/XuLyBaoCo_Ngoc/src/App.tsx) và [components](file:///d:/Project_VCC/KeToanVCC/Ducuments/PhanTach_HachToan/XuLyBaoCo_Ngoc/src/components) đầu tiên.
 - **Khi sửa logic tính toán, mapping dữ liệu hoặc định dạng xuất file Excel**: Đọc [etl.ts](file:///d:/Project_VCC/KeToanVCC/Ducuments/PhanTach_HachToan/XuLyBaoCo_Ngoc/src/utils/etl.ts) đầu tiên.
+- **Khi sửa logic lưu trữ, cấu hình đồng bộ, hoặc API bắn log lên Google Sheets**: Đọc [googleSheetsSync.ts](file:///d:/Project_VCC/KeToanVCC/Ducuments/PhanTach_HachToan/XuLyBaoCo_Ngoc/src/utils/googleSheetsSync.ts) đầu tiên.
 - **Khi cập nhật cấu trúc dữ liệu**: Thay đổi [types.ts](file:///d:/Project_VCC/KeToanVCC/Ducuments/PhanTach_HachToan/XuLyBaoCo_Ngoc/src/types.ts).
 
 ## 7. Ghi chú từ lần quét đầu

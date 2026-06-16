@@ -10,6 +10,7 @@ import FileDropzone from './components/FileDropzone';
 import DataPreviewTable from './components/DataPreviewTable';
 import { runETLPipeline, exportToAccountingExcel } from './utils/etl';
 import { FileSpreadsheet, CheckCircle2, Calculator, FileWarning, Calendar, Info, HelpCircle, AlertTriangle, ChevronLeft, Settings } from 'lucide-react';
+import { loadSheetsConfig, saveSheetsConfig, getPortalUserEmail, writeActionLogToSheet, SheetsConfig } from './utils/googleSheetsSync';
 
 export default function App() {
   const [files, setFiles] = useState<RawFile[]>([]);
@@ -19,6 +20,40 @@ export default function App() {
   const [currentTime, setCurrentTime] = useState('2026-06-15 21:06:34');
   const [showTutorial, setShowTutorial] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [sheetsConfig, setSheetsConfig] = useState<SheetsConfig>(loadSheetsConfig());
+
+  // Auto-fetch portal user email on mount
+  useEffect(() => {
+    const fetchPortalEmail = async () => {
+      try {
+        const portalEmail = await getPortalUserEmail();
+        if (portalEmail) {
+          setSheetsConfig(prev => {
+            const updated = { ...prev, userName: portalEmail };
+            saveSheetsConfig(updated);
+            return updated;
+          });
+        }
+      } catch (e) {
+        console.error('Failed to get portal user email:', e);
+      }
+    };
+    fetchPortalEmail();
+  }, []);
+
+  // Non-blocking fire-and-forget log helper
+  const logUserActionOnSheets = (actionName: string, actionDetails: string) => {
+    if (sheetsConfig.logsEnabled && sheetsConfig.webAppUrl) {
+      writeActionLogToSheet(
+        sheetsConfig.webAppUrl,
+        sheetsConfig.userName,
+        actionName,
+        actionDetails
+      ).catch(err => {
+        console.error('Lỗi ghi log lên Sheets:', err);
+      });
+    }
+  };
 
   // Auto-calculate ETL Results whenever loaded files or configuration changes
   useEffect(() => {
@@ -33,29 +68,52 @@ export default function App() {
   const handleFilesParsed = (newFiles: RawFile[]) => {
     // Append or replace? It is better to append so users can upload files one by one or all at once!
     // But prevent uploading the exact same file twice by comparing file names
-    setFiles((prev) => {
-      const filteredNew = newFiles.filter(nf => !prev.some(pf => pf.name === nf.name));
-      return [...prev, ...filteredNew];
-    });
+    const filteredNew = newFiles.filter(nf => !files.some(pf => pf.name === nf.name));
+    if (filteredNew.length > 0) {
+      setFiles((prev) => [...prev, ...filteredNew]);
+      filteredNew.forEach(f => {
+        let groupName = "Không xác định";
+        if (f.groupType === "group1") groupName = "Tiền về (Nhóm 1)";
+        else if (f.groupType === "group2") groupName = "Báo có ngân hàng (Nhóm 2)";
+        else if (f.groupType === "group3") groupName = "Mã bảng kê (Nhóm 3)";
+        else if (f.groupType === "group4") groupName = "Danh mục hợp đồng (Nhóm 4)";
+        
+        logUserActionOnSheets(
+          "Tải file đối soát",
+          `Tải thành công file đối soát "${f.name}" thuộc nhóm: ${groupName} (${f.rows.length} dòng)`
+        );
+      });
+    }
   };
 
   const handleClearFiles = () => {
     setFiles([]);
     setEtlResult(null);
+    logUserActionOnSheets("Xóa danh sách file", "Đã xóa toàn bộ danh sách file đối soát hiện tại");
   };
 
   const handleExport = () => {
     if (!etlResult || etlResult.processedRows.length === 0 || !config) return;
     
-    // Call SheetJS exporter helper
-    exportToAccountingExcel(etlResult.processedRows, config);
-    
-    // Show success banner
-    setExportSuccess(true);
-    setTimeout(() => setExportSuccess(false), 5000);
+    try {
+      // Call SheetJS exporter helper
+      exportToAccountingExcel(etlResult.processedRows, config);
+      
+      // Show success banner
+      setExportSuccess(true);
+      setTimeout(() => setExportSuccess(false), 5000);
+      
+      logUserActionOnSheets(
+        "Xuất file kế toán",
+        `Xuất thành công File kế toán dạng Excel chứa ${etlResult.processedRows.length} dòng chứng từ đã đối chiếu`
+      );
+    } catch (err) {
+      console.error("Lỗi xuất file Excel:", err);
+      alert("Xuất file Excel thất bại!");
+    }
   };
 
-  const handleUpdateRow = (updatedRow: any) => {
+  const handleUpdateRow = (originalRow: any, updatedRow: any) => {
     if (!etlResult) return;
     setEtlResult(prev => {
       if (!prev) return null;
@@ -78,6 +136,39 @@ export default function App() {
         }
       };
     });
+
+    // Compute diff changes and log
+    const changes: string[] = [];
+    if (originalRow.maKhach !== updatedRow.maKhach) {
+      changes.push(`Mã khách: "${originalRow.maKhach}" -> "${updatedRow.maKhach}"`);
+    }
+    if (originalRow.soChungTuFinal !== updatedRow.soChungTuFinal) {
+      changes.push(`Số CT: "${originalRow.soChungTuFinal}" -> "${updatedRow.soChungTuFinal}"`);
+    }
+    if (originalRow.tienVe !== updatedRow.tienVe) {
+      changes.push(`Tiền về: ${originalRow.tienVe.toLocaleString()} -> ${updatedRow.tienVe.toLocaleString()}`);
+    }
+    if (originalRow.linkTien !== updatedRow.linkTien) {
+      changes.push(`Link tiền: "${originalRow.linkTien}" -> "${updatedRow.linkTien}"`);
+    }
+    if (originalRow.maNganHang !== updatedRow.maNganHang) {
+      changes.push(`Mã ngân hàng: "${originalRow.maNganHang}" -> "${updatedRow.maNganHang}"`);
+    }
+    if (originalRow.bangKeMapped !== updatedRow.bangKeMapped) {
+      changes.push(`Bảng kê: "${originalRow.bangKeMapped}" -> "${updatedRow.bangKeMapped}"`);
+    }
+    if (originalRow.dienGiai !== updatedRow.dienGiai) {
+      changes.push(`Diễn giải: "${originalRow.dienGiai}" -> "${updatedRow.dienGiai}"`);
+    }
+    if (originalRow.maHopDong !== updatedRow.maHopDong) {
+      changes.push(`Hợp đồng: "${originalRow.maHopDong}" -> "${updatedRow.maHopDong}"`);
+    }
+    
+    const desc = changes.length > 0 ? `Cập nhật các trường: ${changes.join(', ')}` : 'Không có thay đổi dữ liệu';
+    logUserActionOnSheets(
+      "Sửa dòng chứng từ",
+      `Sửa dòng chứng từ số ${originalRow.soChungTuFinal} - ${desc}`
+    );
   };
 
   return (
@@ -87,7 +178,14 @@ export default function App() {
       <aside className={`relative h-full transition-all duration-300 ease-in-out bg-white text-slate-800 flex flex-col shrink-0 border-r border-slate-200 overflow-visible z-40 ${isSidebarOpen ? 'w-80' : 'w-0'}`}>
         {/* Sidebar Interior - Fixed width container wraps inside to prevent children squeezing when width reduces */}
         <div className={`w-80 h-full flex flex-col overflow-hidden transition-opacity duration-200 ${isSidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-          <ConfigPanel onConfigChange={(conf) => setConfig(conf)} />
+          <ConfigPanel 
+            onConfigChange={(conf) => setConfig(conf)} 
+            sheetsConfig={sheetsConfig}
+            onSheetsConfigChange={(sConf) => {
+              setSheetsConfig(sConf);
+              saveSheetsConfig(sConf);
+            }}
+          />
         </div>
       </aside>
 
@@ -175,7 +273,13 @@ export default function App() {
             files={files}
             onFilesParsed={handleFilesParsed}
             onClearFiles={handleClearFiles}
-            onRemoveFile={(index) => setFiles((prev) => prev.filter((_, idx) => idx !== index))}
+            onRemoveFile={(index) => {
+              const removedFile = files[index];
+              if (removedFile) {
+                logUserActionOnSheets("Xóa file đối soát", `Đã xóa file "${removedFile.name}" khỏi danh sách`);
+              }
+              setFiles((prev) => prev.filter((_, idx) => idx !== index));
+            }}
           />
 
           {/* Dynamic Spreadsheet Result Grid or Placeholder */}

@@ -52,6 +52,7 @@
 |------|------|---------|
 | [src/utils/etl.ts](file:///d:/Project_VCC/KeToanVCC/Ducuments/PhanTach_HachToan/XuLyBaoCo_Ngoc/src/utils/etl.ts) | CRITICAL | Trái tim xử lý dữ liệu: đọc 4 nhóm file Excel, mapping hợp đồng, đối chiếu số tiền, xử lý trùng lặp và xuất tệp kế toán. |
 | [src/App.tsx](file:///d:/Project_VCC/KeToanVCC/Ducuments/PhanTach_HachToan/XuLyBaoCo_Ngoc/src/App.tsx) | CRITICAL | Layout chính, lưu giữ state của các file tải lên, cấu hình ETL và thực hiện kích hoạt xuất Excel. |
+| [src/utils/googleSheetsSync.ts](file:///d:/Project_VCC/KeToanVCC/Ducuments/PhanTach_HachToan/XuLyBaoCo_Ngoc/src/utils/googleSheetsSync.ts) | IMPORTANT | Tiện ích đồng bộ cấu hình và ghi nhật ký hoạt động người dùng lên Google Sheets Web App. |
 | [src/components/ConfigPanel.tsx](file:///d:/Project_VCC/KeToanVCC/Ducuments/PhanTach_HachToan/XuLyBaoCo_Ngoc/src/components/ConfigPanel.tsx) | IMPORTANT | Bảng điều khiển cấu hình: ĐVCS, TK Có, Mã ngoại tệ, Tỷ giá, Mã giao dịch mặc định, Tiền tố mã quyển, và bảng map tay tài khoản ngân hàng. |
 | [src/components/DataPreviewTable.tsx](file:///d:/Project_VCC/KeToanVCC/Ducuments/PhanTach_HachToan/XuLyBaoCo_Ngoc/src/components/DataPreviewTable.tsx) | IMPORTANT | Bảng xem trước dữ liệu sau xử lý, hiển thị các cảnh báo trùng tiền hoặc không tìm thấy mã khách hàng (màu vàng/đỏ). |
 

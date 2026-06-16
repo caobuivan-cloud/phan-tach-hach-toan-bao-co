@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ETLConfig } from '../types';
 import { Settings, Plus, Trash2, RotateCcw, AlertCircle, Database } from 'lucide-react';
+import { SheetsConfig } from '../utils/googleSheetsSync';
 
 const LOCAL_STORAGE_KEY = 'accounting_etl_config_v1';
 
@@ -25,9 +26,11 @@ const DEFAULT_CONFIG: ETLConfig = {
 
 interface ConfigPanelProps {
   onConfigChange: (config: ETLConfig) => void;
+  sheetsConfig: SheetsConfig;
+  onSheetsConfigChange: (config: SheetsConfig) => void;
 }
 
-export default function ConfigPanel({ onConfigChange }: ConfigPanelProps) {
+export default function ConfigPanel({ onConfigChange, sheetsConfig, onSheetsConfigChange }: ConfigPanelProps) {
   const [config, setConfig] = useState<ETLConfig>(DEFAULT_CONFIG);
   const [newBank, setNewBank] = useState('');
   const [newAccount, setNewAccount] = useState('');
@@ -343,6 +346,50 @@ export default function ConfigPanel({ onConfigChange }: ConfigPanelProps) {
                   <Plus className="w-3.5 h-3.5" />
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Google Sheets Logging Panel in sidebar */}
+        <div className="border-t border-slate-100 pt-5">
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3">Nhật ký hoạt động (Google Sheets)</p>
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-slate-800 flex flex-col space-y-3 transition-all shadow-3xs">
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Tên người dùng / Email</label>
+              <input
+                id="input-gs-user"
+                type="text"
+                value={sheetsConfig.userName}
+                onChange={(e) => onSheetsConfigChange({ ...sheetsConfig, userName: e.target.value })}
+                className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 text-xs font-semibold focus:outline-none focus:border-blue-500"
+                placeholder="Kế toán viên"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Web App URL</label>
+              <input
+                id="input-gs-url"
+                type="text"
+                value={sheetsConfig.webAppUrl}
+                onChange={(e) => onSheetsConfigChange({ ...sheetsConfig, webAppUrl: e.target.value })}
+                className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 text-xs font-mono focus:outline-none focus:border-blue-500"
+                placeholder="https://script.google.com/..."
+              />
+            </div>
+            
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Bật nhật ký hoạt động</span>
+              <label className="relative inline-flex items-center cursor-pointer select-none">
+                <input
+                  id="checkbox-gs-logs-enabled"
+                  type="checkbox"
+                  checked={sheetsConfig.logsEnabled}
+                  onChange={(e) => onSheetsConfigChange({ ...sheetsConfig, logsEnabled: e.target.checked })}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+              </label>
             </div>
           </div>
         </div>

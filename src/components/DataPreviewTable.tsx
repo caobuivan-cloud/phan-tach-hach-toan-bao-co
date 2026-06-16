@@ -7,7 +7,7 @@ interface DataPreviewTableProps {
   etlResult: ETLResult;
   config: ETLConfig;
   onExport: () => void;
-  onUpdateRow: (updatedRow: ProcessedRow) => void;
+  onUpdateRow: (originalRow: ProcessedRow, updatedRow: ProcessedRow) => void;
 }
 
 export default function DataPreviewTable({ etlResult, config, onExport, onUpdateRow }: DataPreviewTableProps) {
@@ -39,7 +39,7 @@ export default function DataPreviewTable({ etlResult, config, onExport, onUpdate
       ...editForm,
     } as ProcessedRow;
 
-    onUpdateRow(updatedRow);
+    onUpdateRow(originalRow, updatedRow);
     setEditingId(null);
     setEditForm({});
   };
