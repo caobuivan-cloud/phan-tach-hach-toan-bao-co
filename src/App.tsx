@@ -262,7 +262,7 @@ export default function App() {
                     </div>
 
                     <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-[11px]">
-                      <div className="font-bold text-indigo-600 uppercase tracking-wider mb-1.5">2. Tiền về Ngân hàng (Nhóm 2)</div>
+                      <div className="font-bold text-indigo-600 uppercase tracking-wider mb-1.5">2. Báo có ngân hàng (Nhóm 2)</div>
                       <ul className="space-y-1 text-slate-500 font-medium">
                         <li>• <strong className="text-slate-700">Ngân hàng</strong> (Cột A)</li>
                         <li>• <strong className="text-slate-700">Số tiền ghi có</strong> (Cột D)</li>

@@ -172,7 +172,7 @@ export default function DataPreviewTable({ etlResult, config, onExport, onUpdate
           <div className="flex flex-wrap gap-4">
             <div className="flex items-center gap-1.5">
               <span className="w-3.5 h-3.5 bg-yellow-100 border border-yellow-200 rounded-md shrink-0 block"></span>
-              <span className="text-gray-600">Trạng thái Chưa ghi nhận (Từ Nhóm 2)</span>
+              <span className="text-gray-600">Chưa ghi nhận (Trong báo có ngân hàng)</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-3.5 h-3.5 bg-red-100 border border-red-200 rounded-md shrink-0 block"></span>
@@ -229,10 +229,47 @@ export default function DataPreviewTable({ etlResult, config, onExport, onUpdate
 
                   const isNoClient = row.maKhach.includes('Cảnh báo') || !row.maKhach || row.maKhach === '';
 
+                  const rowErrors: string[] = [];
+                  if (isNoClient) {
+                    rowErrors.push('Cảnh báo không tìm thấy Mã khách');
+                  }
+                  if (row.isYellowWarning) {
+                    rowErrors.push('Chưa ghi nhận (Trong báo có ngân hàng)');
+                  }
+                  if (row.isRedWarning) {
+                    rowErrors.push('Trùng Link tiền + Lệch tiền với ghi có');
+                  }
+                  const hasErrors = rowErrors.length > 0;
+
                   return (
                     <tr key={row.id} className={`transition-colors text-[11px] ${isEditing ? 'bg-blue-50/40 text-slate-900 ring-2 ring-blue-100 border-l-4 border-blue-500' : rowBg}`} id={`row-${i}`}>
                       {/* 1. STT */}
-                      <td className="py-2 px-3.5 text-center text-gray-400 select-none font-medium">{i + 1}</td>
+                      <td 
+                        className={`py-2 px-3.5 text-center select-none font-medium relative group ${hasErrors ? 'cursor-help' : 'text-gray-400'}`}
+                        title={hasErrors ? rowErrors.join('\n') : undefined}
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          <span>{i + 1}</span>
+                          {hasErrors && (
+                            <>
+                              <AlertTriangle 
+                                className={`w-3.5 h-3.5 shrink-0 ${
+                                  row.isRedWarning || isNoClient ? 'text-red-500' : 'text-yellow-500'
+                                }`} 
+                              />
+                              <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 hidden group-hover:flex flex-col gap-1 bg-slate-900 text-white text-[10px] rounded-lg py-2 px-3 z-50 shadow-xl border border-slate-700 pointer-events-none min-w-[220px] text-left leading-normal font-medium normal-case">
+                                <div className="font-bold text-[9px] text-slate-400 uppercase tracking-wider mb-0.5">Chi tiết lỗi/cảnh báo:</div>
+                                {rowErrors.map((err, idx) => (
+                                  <div key={idx} className="flex items-start gap-1.5">
+                                    <span className={`w-1.5 h-1.5 rounded-full mt-1 shrink-0 ${err.includes('Mã khách') || err.includes('Lệch tiền') ? 'bg-red-500' : 'bg-yellow-500'}`}></span>
+                                    <span>{err}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </td>
 
                       {/* 2. ACTIONS */}
                       <td className="py-2 px-2 text-center">
