@@ -350,53 +350,12 @@ export default function ConfigPanel({ onConfigChange, sheetsConfig, onSheetsConf
           </div>
         </div>
 
-        {/* Google Sheets Logging Panel in sidebar */}
-        <div className="border-t border-slate-100 pt-5">
-          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3">Nhật ký hoạt động (Google Sheets)</p>
-          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-slate-800 flex flex-col space-y-3 transition-all shadow-3xs">
-            <div>
-              <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Tên người dùng / Email</label>
-              <input
-                id="input-gs-user"
-                type="text"
-                value={sheetsConfig.userName}
-                onChange={(e) => onSheetsConfigChange({ ...sheetsConfig, userName: e.target.value })}
-                className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 text-xs font-semibold focus:outline-none focus:border-blue-500"
-                placeholder="Kế toán viên"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Web App URL</label>
-              <input
-                id="input-gs-url"
-                type="text"
-                value={sheetsConfig.webAppUrl}
-                onChange={(e) => onSheetsConfigChange({ ...sheetsConfig, webAppUrl: e.target.value })}
-                className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 text-xs font-mono focus:outline-none focus:border-blue-500"
-                placeholder="https://script.google.com/..."
-              />
-            </div>
-            
-            <div className="flex items-center justify-between pt-1">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Bật nhật ký hoạt động</span>
-              <label className="relative inline-flex items-center cursor-pointer select-none">
-                <input
-                  id="checkbox-gs-logs-enabled"
-                  type="checkbox"
-                  checked={sheetsConfig.logsEnabled}
-                  onChange={(e) => onSheetsConfigChange({ ...sheetsConfig, logsEnabled: e.target.checked })}
-                  className="sr-only peer"
-                />
-                <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-              </label>
-            </div>
-          </div>
-        </div>
       </div>
 
       <div className="p-3 bg-slate-50 shrink-0 border-t border-slate-100 text-[10px] text-center text-slate-400 select-none">
-        <p>Enterprise Edition • Accounting ETL</p>
+        <p className="truncate px-2" title={`${sheetsConfig.userName} • Accounting ETL`}>
+          {sheetsConfig.userName} • Accounting ETL
+        </p>
       </div>
     </div>
   );

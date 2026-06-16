@@ -29,7 +29,7 @@ export function loadSheetsConfig(): SheetsConfig {
   return {
     webAppUrl: localStorage.getItem(STORAGE_KEYS.WEB_APP_URL) || "https://script.google.com/macros/s/AKfycbzkcc7_pTYK2K8GmjDR720MKnjjUGP-OMh5rzAkcDGB-y3XI3LQ07hCF_0LG155ykyd/exec",
     userName: localStorage.getItem(STORAGE_KEYS.USER_NAME) || "Kế toán viên",
-    logsEnabled: localStorage.getItem(STORAGE_KEYS.LOGS_ENABLED) === "true",
+    logsEnabled: localStorage.getItem(STORAGE_KEYS.LOGS_ENABLED) !== "false",
   };
 }
 
