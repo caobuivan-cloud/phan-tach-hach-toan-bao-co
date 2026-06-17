@@ -79,4 +79,4 @@ npm run clean
 
 ---
 
-*Last updated: 2026-06-16 | v1.0.0*
+*Last updated: 2026-06-17 | v1.1.0*

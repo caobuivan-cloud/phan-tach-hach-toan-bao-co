@@ -23,4 +23,5 @@ Lưu trữ những **quyết định kiến trúc** quan trọng và **lý do ch
 ## Ongoing Decisions
 
 - 2026-06-16 **[Kiến trúc: Tách biệt cấu hình SheetsConfig khỏi ETLConfig]**. Why: Tách cấu hình nhật ký hoạt động (Google Sheets) độc lập khỏi cấu hình hạch toán nghiệp vụ (ETLConfig) để tránh việc kích hoạt chạy lại quy trình ETL khi người dùng chỉnh sửa thiết lập nhật ký ở Sidebar, từ đó tối ưu hiệu năng hiển thị và tránh lặp thao tác xử lý dữ liệu.
+- 2026-06-17 **[Kiến trúc: Quản lý ManualEdits độc lập và Post-processing bất biến]**. Why: Quản lý các sửa tay thủ công của người dùng dưới dạng một bản đồ (record) theo index gốc của tệp tin. Việc gộp thủ công (`recomputeRowsAfterManualEdits`) thực hiện clone và tính toán lại toàn bộ các trường phụ thuộc nghiệp vụ (cảnh báo vàng, trạng thái trùng tiền đỏ, hạch toán giao dịch) từ baseline thô ban đầu của `rawResult` đã `useMemo`. Điều này đảm bảo tính nhất quán nghiệp vụ hạch toán, tránh stale/stuck/mutation state và giữ vững tính bất biến (immutability) của dữ liệu thô.
 

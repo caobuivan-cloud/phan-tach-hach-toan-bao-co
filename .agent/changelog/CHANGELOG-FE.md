@@ -6,6 +6,17 @@
 
 ---
 
+## 2026-06-17
+
+### feat: hoàn thành cảnh báo và bộ lọc khi người dùng sửa tay (v7) và chú thích màu giao diện
+- Tách biệt state quản lý chỉnh sửa tay thủ công `manualEdits` độc lập dựa trên index gốc của dòng dữ liệu Excel (`originalIndex`), loại bỏ tình trạng lệch index khi thực hiện lọc hoặc tìm kiếm.
+- Bổ sung helper `recomputeRowsAfterManualEdits` tập trung để gộp và tính toán lại các trường derived kế toán (đối chiếu ngân hàng Nhóm 2, reset và đánh giá lại cảnh báo trùng tiền đỏ, hạch toán mã giao dịch) dưới dạng immutable clone từ tệp tin thô.
+- Cải tiến bộ đếm lỗi `warningsCount` tự động loại bỏ các dòng đã được sửa tay (được coi là đã xử lý xong) để đồng bộ với bộ lọc tab.
+- Thêm tab "Sửa tay" và hiển thị dòng sửa tay với nền màu xanh da trời nhạt, biểu tượng `Info` ở cột STT kèm tooltip hiển thị "Người dùng sửa tay".
+- Bổ sung validation chặt chẽ khi xuất Excel hạch toán: ném lỗi ngoại lệ từ utility `etl.ts` và thực hiện `try-catch` tại `App.tsx` hiển thị thông báo alert đỏ chặn xuất file nếu còn chứa cảnh báo mã khách trống hoặc lỗi.
+- Bổ sung xác nhận `window.confirm` cảnh báo mất dữ liệu sửa tay khi tải tệp mới hoặc xóa tệp tin cũ.
+- Tinh chỉnh lại bố cục phần chú thích màu sắc: đưa tiêu đề Chú thích lên hàng riêng biệt phía trên và xếp ngang 4 hộp chú thích màu sắc gọn gàng ở hàng bên dưới.
+
 ## 2026-06-16
 
 ### feat(sync): đồng bộ Bản đồ tài khoản nợ (Bank Mappings) lên Google Sheets
