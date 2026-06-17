@@ -3,12 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from 'react';
-import { RawFile, ETLConfig, ETLResult } from './types';
+import { useState, useEffect, useMemo } from 'react';
+import { RawFile, ETLConfig, ETLResult, ManualEditState, ProcessedRow, EditableProcessedRowField } from './types';
 import ConfigPanel from './components/ConfigPanel';
 import FileDropzone from './components/FileDropzone';
 import DataPreviewTable from './components/DataPreviewTable';
-import { runETLPipeline, exportToAccountingExcel } from './utils/etl';
+import { runETLPipeline, exportToAccountingExcel, recomputeRowsAfterManualEdits, deriveWarningsCount } from './utils/etl';
 import { FileSpreadsheet, CheckCircle2, Calculator, FileWarning, Calendar, Info, HelpCircle, AlertTriangle, ChevronLeft, Settings } from 'lucide-react';
 import { loadSheetsConfig, saveSheetsConfig, getPortalUserEmail, writeActionLogToSheet, SheetsConfig } from './utils/googleSheetsSync';
 
@@ -16,11 +16,20 @@ export default function App() {
   const [files, setFiles] = useState<RawFile[]>([]);
   const [config, setConfig] = useState<ETLConfig | null>(null);
   const [etlResult, setEtlResult] = useState<ETLResult | null>(null);
+  const [manualEdits, setManualEdits] = useState<Record<number, ManualEditState>>({});
   const [exportSuccess, setExportSuccess] = useState(false);
   const [currentTime, setCurrentTime] = useState('2026-06-15 21:06:34');
   const [showTutorial, setShowTutorial] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [sheetsConfig, setSheetsConfig] = useState<SheetsConfig>(loadSheetsConfig());
+
+  // Baseline thô từ files và config
+  const rawResult = useMemo(() => {
+    if (files.length > 0 && config) {
+      return runETLPipeline(files, config);
+    }
+    return null;
+  }, [files, config]);
 
   // Auto-fetch portal user email on mount
   useEffect(() => {
@@ -69,41 +78,76 @@ export default function App() {
     }
   };
 
-  // Auto-calculate ETL Results whenever loaded files or configuration changes
+  // Cập nhật ETLResult gộp khi rawResult hoặc manualEdits thay đổi
   useEffect(() => {
-    if (files.length > 0 && config) {
-      const results = runETLPipeline(files, config);
-      setEtlResult(results);
+    if (rawResult && config) {
+      const mergedRows = recomputeRowsAfterManualEdits(
+        rawResult.processedRows,
+        manualEdits,
+        files,
+        config
+      );
+      const warningsCount = deriveWarningsCount(mergedRows);
+      const manualEditCount = mergedRows.filter(r => r.isManuallyEdited).length;
+      
+      setEtlResult({
+        ...rawResult,
+        processedRows: mergedRows,
+        warningsCount,
+        manualEditCount
+      });
     } else {
       setEtlResult(null);
     }
-  }, [files, config]);
+  }, [rawResult, manualEdits, files, config]);
 
   const handleFilesParsed = (newFiles: RawFile[]) => {
-    // Append or replace? It is better to append so users can upload files one by one or all at once!
-    // But prevent uploading the exact same file twice by comparing file names
     const filteredNew = newFiles.filter(nf => !files.some(pf => pf.name === nf.name));
-    if (filteredNew.length > 0) {
-      setFiles((prev) => [...prev, ...filteredNew]);
-      filteredNew.forEach(f => {
-        let groupName = "Không xác định";
-        if (f.groupType === "group1") groupName = "Tiền về (Nhóm 1)";
-        else if (f.groupType === "group2") groupName = "Báo có ngân hàng (Nhóm 2)";
-        else if (f.groupType === "group3") groupName = "Mã bảng kê (Nhóm 3)";
-        else if (f.groupType === "group4") groupName = "Danh mục hợp đồng (Nhóm 4)";
-        
-        logUserActionOnSheets(
-          "Tải file đối soát",
-          `Tải thành công file đối soát "${f.name}" thuộc nhóm: ${groupName} (${f.rows.length} dòng)`
-        );
-      });
+    if (filteredNew.length === 0) return;
+
+    if (Object.keys(manualEdits).length > 0) {
+      const ok = window.confirm("Cấu hình tệp tin thay đổi sẽ làm mất toàn bộ các chỉnh sửa tay hiện có. Bạn có chắc chắn muốn tiếp tục?");
+      if (!ok) return;
+      setManualEdits({});
     }
+
+    setFiles((prev) => [...prev, ...filteredNew]);
+    filteredNew.forEach(f => {
+      let groupName = "Không xác định";
+      if (f.groupType === "group1") groupName = "Tiền về (Nhóm 1)";
+      else if (f.groupType === "group2") groupName = "Báo có ngân hàng (Nhóm 2)";
+      else if (f.groupType === "group3") groupName = "Mã bảng kê (Nhóm 3)";
+      else if (f.groupType === "group4") groupName = "Danh mục hợp đồng (Nhóm 4)";
+      
+      logUserActionOnSheets(
+        "Tải file đối soát",
+        `Tải thành công file đối soát "${f.name}" thuộc nhóm: ${groupName} (${f.rows.length} dòng)`
+      );
+    });
   };
 
   const handleClearFiles = () => {
+    if (Object.keys(manualEdits).length > 0) {
+      const ok = window.confirm("Xóa toàn bộ danh sách tệp tin sẽ làm mất các chỉnh sửa tay hiện có. Bạn có chắc chắn muốn tiếp tục?");
+      if (!ok) return;
+      setManualEdits({});
+    }
     setFiles([]);
     setEtlResult(null);
     logUserActionOnSheets("Xóa danh sách file", "Đã xóa toàn bộ danh sách file đối soát hiện tại");
+  };
+
+  const handleRemoveFile = (index: number) => {
+    if (Object.keys(manualEdits).length > 0) {
+      const ok = window.confirm("Thay đổi danh sách tệp tin sẽ làm mất toàn bộ các chỉnh sửa tay hiện có. Bạn có chắc chắn muốn tiếp tục?");
+      if (!ok) return;
+      setManualEdits({});
+    }
+    const removedFile = files[index];
+    if (removedFile) {
+      logUserActionOnSheets("Xóa file đối soát", `Đã xóa file "${removedFile.name}" khỏi danh sách`);
+    }
+    setFiles((prev) => prev.filter((_, idx) => idx !== index));
   };
 
   const handleExport = () => {
@@ -121,62 +165,76 @@ export default function App() {
         "Xuất file kế toán",
         `Xuất thành công File kế toán dạng Excel chứa ${etlResult.processedRows.length} dòng chứng từ đã đối chiếu`
       );
-    } catch (err) {
+    } catch (err: any) {
       console.error("Lỗi xuất file Excel:", err);
-      alert("Xuất file Excel thất bại!");
+      alert(err.message || "Xuất file Excel thất bại!");
     }
   };
 
-  const handleUpdateRow = (originalRow: any, updatedRow: any) => {
-    if (!etlResult) return;
-    setEtlResult(prev => {
-      if (!prev) return null;
-      const newRows = prev.processedRows.map(row => 
-        row.id === updatedRow.id ? updatedRow : row
-      );
-      
-      // Recalculate warnings count
-      const noClientCode = newRows.filter(r => r.maKhach.includes('Cảnh báo') || !r.maKhach || r.maKhach === '').length;
-      const notAcknowledged = newRows.filter(r => r.isYellowWarning).length;
-      const amountMismatch = newRows.filter(r => r.isRedWarning).length;
-      
-      return {
-        ...prev,
-        processedRows: newRows,
-        warningsCount: {
-          noClientCode,
-          notAcknowledged,
-          amountMismatch,
+  const handleUpdateRow = (originalIndex: number, originalRow: ProcessedRow, updatedRow: ProcessedRow) => {
+    if (!rawResult) return;
+
+    const rawRow = rawResult.processedRows[originalIndex];
+    if (!rawRow) return;
+
+    setManualEdits(prev => {
+      const currentEdit = prev[originalIndex] || { values: {}, editedFields: [] };
+      const newValues = { ...currentEdit.values };
+      const newEditedFields = [...currentEdit.editedFields];
+
+      const EDITABLE_FIELDS: EditableProcessedRowField[] = [
+        'maKhach', 'soChungTuFinal', 'ngayTienVe', 'maGiaoDichFinal',
+        'tienVe', 'linkTien', 'maNganHang', 'soTienGhiCo',
+        'bangKeMapped', 'dienGiai', 'maHopDong'
+      ];
+
+      EDITABLE_FIELDS.forEach(field => {
+        const updatedVal = updatedRow[field];
+        const originalVal = originalRow[field];
+        const rawVal = rawRow[field];
+
+        // 1. So sánh updatedRow với originalRow để phát hiện thay đổi mới trong lần edit này
+        if (updatedVal !== originalVal) {
+          if (!newEditedFields.includes(field)) {
+            newEditedFields.push(field);
+          }
+          (newValues as any)[field] = updatedVal;
         }
-      };
+
+        // 2. So sánh với baseline thô. Nếu giá trị mới sau khi cập nhật bằng giá trị thô, revert nó
+        if (updatedVal === rawVal) {
+          const index = newEditedFields.indexOf(field);
+          if (index > -1) {
+            newEditedFields.splice(index, 1);
+          }
+          delete (newValues as any)[field];
+        }
+      });
+
+      const nextEdits = { ...prev };
+      if (newEditedFields.length > 0) {
+        nextEdits[originalIndex] = {
+          values: newValues,
+          editedFields: newEditedFields
+        };
+      } else {
+        delete nextEdits[originalIndex];
+      }
+      return nextEdits;
     });
 
     // Compute diff changes and log
     const changes: string[] = [];
-    if (originalRow.maKhach !== updatedRow.maKhach) {
-      changes.push(`Mã khách: "${originalRow.maKhach}" -> "${updatedRow.maKhach}"`);
-    }
-    if (originalRow.soChungTuFinal !== updatedRow.soChungTuFinal) {
-      changes.push(`Số CT: "${originalRow.soChungTuFinal}" -> "${updatedRow.soChungTuFinal}"`);
-    }
-    if (originalRow.tienVe !== updatedRow.tienVe) {
-      changes.push(`Tiền về: ${originalRow.tienVe.toLocaleString()} -> ${updatedRow.tienVe.toLocaleString()}`);
-    }
-    if (originalRow.linkTien !== updatedRow.linkTien) {
-      changes.push(`Link tiền: "${originalRow.linkTien}" -> "${updatedRow.linkTien}"`);
-    }
-    if (originalRow.maNganHang !== updatedRow.maNganHang) {
-      changes.push(`Mã ngân hàng: "${originalRow.maNganHang}" -> "${updatedRow.maNganHang}"`);
-    }
-    if (originalRow.bangKeMapped !== updatedRow.bangKeMapped) {
-      changes.push(`Bảng kê: "${originalRow.bangKeMapped}" -> "${updatedRow.bangKeMapped}"`);
-    }
-    if (originalRow.dienGiai !== updatedRow.dienGiai) {
-      changes.push(`Diễn giải: "${originalRow.dienGiai}" -> "${updatedRow.dienGiai}"`);
-    }
-    if (originalRow.maHopDong !== updatedRow.maHopDong) {
-      changes.push(`Hợp đồng: "${originalRow.maHopDong}" -> "${updatedRow.maHopDong}"`);
-    }
+    const EDITABLE_FIELDS: EditableProcessedRowField[] = [
+      'maKhach', 'soChungTuFinal', 'ngayTienVe', 'maGiaoDichFinal',
+      'tienVe', 'linkTien', 'maNganHang', 'soTienGhiCo',
+      'bangKeMapped', 'dienGiai', 'maHopDong'
+    ];
+    EDITABLE_FIELDS.forEach(field => {
+      if (originalRow[field] !== updatedRow[field]) {
+        changes.push(`${field}: "${originalRow[field]}" -> "${updatedRow[field]}"`);
+      }
+    });
     
     const desc = changes.length > 0 ? `Cập nhật các trường: ${changes.join(', ')}` : 'Không có thay đổi dữ liệu';
     logUserActionOnSheets(
@@ -287,13 +345,7 @@ export default function App() {
             files={files}
             onFilesParsed={handleFilesParsed}
             onClearFiles={handleClearFiles}
-            onRemoveFile={(index) => {
-              const removedFile = files[index];
-              if (removedFile) {
-                logUserActionOnSheets("Xóa file đối soát", `Đã xóa file "${removedFile.name}" khỏi danh sách`);
-              }
-              setFiles((prev) => prev.filter((_, idx) => idx !== index));
-            }}
+            onRemoveFile={handleRemoveFile}
           />
 
           {/* Dynamic Spreadsheet Result Grid or Placeholder */}
@@ -325,7 +377,6 @@ export default function App() {
               <DataPreviewTable 
                 etlResult={etlResult} 
                 config={config} 
-                onExport={handleExport}
                 onUpdateRow={handleUpdateRow}
               />
             </div>

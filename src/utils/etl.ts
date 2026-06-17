@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { RawFile, FileGroup, ETLConfig, ProcessedRow, ETLResult } from '../types';
+import { RawFile, FileGroup, ETLConfig, ProcessedRow, ETLResult, ManualEditState } from '../types';
 
 // Helper to sanitize and normalize text for robust matching
 export function cleanString(val: any): string {
@@ -300,6 +300,8 @@ export function runETLPipeline(files: RawFile[], config: ETLConfig): ETLResult {
       maGiaoDichFinal: config.maGiaoDich,
       soChungTuFinal: '',
       maQuyenFinal: '',
+      isManuallyEdited: false,
+      editedFields: [],
     };
   });
 
@@ -363,15 +365,7 @@ export function runETLPipeline(files: RawFile[], config: ETLConfig): ETLResult {
   });
 
   // 4. Summarize warnings count
-  let noClientCode = 0;
-  let notAcknowledged = 0;
-  let amountMismatch = 0;
-
-  processedRows.forEach(row => {
-    if (row.maKhach.includes('Cảnh báo')) noClientCode++;
-    if (row.isYellowWarning) notAcknowledged++;
-    if (row.isRedWarning) amountMismatch++;
-  });
+  const warningsCount = deriveWarningsCount(processedRows);
 
   return {
     processedRows,
@@ -383,11 +377,8 @@ export function runETLPipeline(files: RawFile[], config: ETLConfig): ETLResult {
       group4Count: g4Files.length,
       unknownCount: files.filter(f => f.groupType === 'unknown').length,
     },
-    warningsCount: {
-      noClientCode,
-      notAcknowledged,
-      amountMismatch,
-    },
+    warningsCount,
+    manualEditCount: 0,
   };
 }
 
@@ -395,6 +386,13 @@ export function runETLPipeline(files: RawFile[], config: ETLConfig): ETLResult {
  * Convert mapped row data into the specified 21-column Excel output layout.
  */
 export function exportToAccountingExcel(rows: ProcessedRow[], config: ETLConfig) {
+  // Validate rows (including manually edited ones)
+  rows.forEach((row, i) => {
+    if (!row.maKhach || row.maKhach.trim() === '' || row.maKhach.includes('Cảnh báo')) {
+      throw new Error(`Dòng thứ ${i + 1} có Mã khách không hợp lệ: "${row.maKhach}". Vui lòng sửa lại mã khách trước khi xuất.`);
+    }
+  });
+
   // Title row: "Import phiếu báo có" at A1
   const rawData: any[][] = [
     ['Import phiếu báo có'], // Row 1
@@ -510,4 +508,195 @@ export function exportToAccountingExcel(rows: ProcessedRow[], config: ETLConfig)
 
   // Generate binary buffer download
   XLSX.writeFile(wb, 'import_phieu_bao_co.xlsx');
+}
+
+/**
+ * Xây dựng hàm helper deriveWarningsCount để đếm các lỗi chưa xử lý (unresolved errors)
+ */
+export function deriveWarningsCount(rows: ProcessedRow[]): {
+  noClientCode: number;
+  notAcknowledged: number;
+  amountMismatch: number;
+} {
+  let noClientCode = 0;
+  let notAcknowledged = 0;
+  let amountMismatch = 0;
+
+  rows.forEach(row => {
+    if (row.isManuallyEdited) {
+      return; // Dòng đã sửa tay được xem là đã xử lý và bị loại bỏ khỏi unresolved warning để đồng bộ UI
+    }
+    if (!row.maKhach || row.maKhach.trim() === '' || row.maKhach.includes('Cảnh báo')) {
+      noClientCode++;
+    }
+    if (row.isYellowWarning) {
+      notAcknowledged++;
+    }
+    if (row.isRedWarning) {
+      amountMismatch++;
+    }
+  });
+
+  return {
+    noClientCode,
+    notAcknowledged,
+    amountMismatch,
+  };
+}
+
+/**
+ * Xây dựng hàm helper tập trung recomputeRowsAfterManualEdits để gộp và tính toán lại
+ * các trường phụ thuộc nghiệp vụ (Post-processing)
+ */
+export function recomputeRowsAfterManualEdits(
+  rawRows: ProcessedRow[],
+  manualEdits: Record<number, ManualEditState>,
+  files: RawFile[],
+  config: ETLConfig
+): ProcessedRow[] {
+  // 1. Clone từng object dòng từ rawRows để tránh mutation
+  const rows = rawRows.map(row => ({
+    ...row,
+    editedFields: [...row.editedFields]
+  }));
+
+  // 2. Áp dụng các thay đổi từ manualEdits lên từng dòng
+  Object.entries(manualEdits).forEach(([indexStr, editState]) => {
+    const idx = parseInt(indexStr, 10);
+    if (idx >= 0 && idx < rows.length) {
+      const row = rows[idx];
+      row.isManuallyEdited = true;
+      row.editedFields = [...editState.editedFields];
+      Object.entries(editState.values).forEach(([field, val]) => {
+        (row as any)[field] = val;
+      });
+    }
+  });
+
+  // 3. Mapping ngân hàng & Recompute Yellow Warning
+  // Đối chiếu tệp Nhóm 2 để mapping lại maNganHang, soTienGhiCo, nhom2TrangThai cho các trường thay đổi linkTien
+  const g2Files = files.filter(f => f.groupType === 'group2');
+  const df2: any[][] = [];
+  g2Files.forEach(file => {
+    const dataRows = file.rows.slice(file.headerIndex + 1);
+    dataRows.forEach(row => {
+      const isBlank = row.every(cell => cell === null || cell === undefined || String(cell).trim() === '');
+      if (!isBlank && row.length > 0) {
+        df2.push(row);
+      }
+    });
+  });
+
+  rows.forEach(row => {
+    // Chỉ mapping lại khi linkTien thay đổi (nằm trong editedFields)
+    if (row.editedFields.includes('linkTien')) {
+      const cleanLink = cleanString(row.linkTien);
+      if (cleanLink !== '') {
+        const match2 = df2.find(r2 => {
+          const desc2 = cleanString(r2[5]); // Mô tả ngân hàng
+          return desc2.includes(cleanLink);
+        });
+        if (match2) {
+          if (!row.editedFields.includes('maNganHang')) {
+            row.maNganHang = trimString(match2[0]);
+          }
+          if (!row.editedFields.includes('soTienGhiCo')) {
+            row.soTienGhiCo = parseNumber(match2[3]);
+          }
+          row.nhom2TrangThai = trimString(match2[6]);
+        } else {
+          // Không tìm thấy thì reset về mặc định
+          if (!row.editedFields.includes('maNganHang')) {
+            row.maNganHang = '';
+          }
+          if (!row.editedFields.includes('soTienGhiCo')) {
+            row.soTienGhiCo = null;
+          }
+          row.nhom2TrangThai = '';
+        }
+      } else {
+        // Link tiền trống thì reset về mặc định
+        if (!row.editedFields.includes('maNganHang')) {
+          row.maNganHang = '';
+        }
+        if (!row.editedFields.includes('soTienGhiCo')) {
+          row.soTienGhiCo = null;
+        }
+        row.nhom2TrangThai = '';
+      }
+    }
+
+    // Tính toán lại cảnh báo vàng đối với MỌI dòng từ nhom2TrangThai hiện tại
+    row.isYellowWarning = (row.nhom2TrangThai || '').toLowerCase() === 'chưa ghi nhận';
+  });
+
+  // 4. Reset duplicate status & maGiaoDichFinal cho mọi dòng trước khi chạy đối soát nhóm trùng
+  rows.forEach(row => {
+    row.isDuplicateLinkTien = false;
+    row.isRedWarning = false;
+    if (!row.editedFields.includes('maGiaoDichFinal')) {
+      row.maGiaoDichFinal = config.maGiaoDich;
+    }
+  });
+
+  // 5. Đối soát nhóm trùng: Nhóm theo linkTien mới
+  const linkGroups: Record<string, ProcessedRow[]> = {};
+  rows.forEach(row => {
+    const key = cleanString(row.linkTien);
+    if (key !== '') {
+      if (!linkGroups[key]) {
+        linkGroups[key] = [];
+      }
+      linkGroups[key].push(row);
+    }
+  });
+
+  Object.values(linkGroups).forEach(group => {
+    if (group.length > 1) {
+      const sumTienVe = group.reduce((sum, r) => sum + r.tienVe, 0);
+      group.forEach(row => {
+        row.isDuplicateLinkTien = true;
+        const ghiCoVal = row.soTienGhiCo !== null ? row.soTienGhiCo : 0;
+        if (sumTienVe !== ghiCoVal) {
+          row.isRedWarning = true;
+          if (!row.editedFields.includes('maGiaoDichFinal')) {
+            row.maGiaoDichFinal = config.maGiaoDich;
+          }
+        } else {
+          row.isRedWarning = false;
+          if (!row.editedFields.includes('maGiaoDichFinal')) {
+            row.maGiaoDichFinal = '3';
+          }
+        }
+      });
+    }
+  });
+
+  // 6. Tính lại diễn giải, mã hợp đồng và các trường khác
+  rows.forEach((row, i) => {
+    // Diễn giải
+    if (!row.editedFields.includes('dienGiai')) {
+      if (row.bangKeMapped !== '') {
+        row.dienGiai = `${row.bangKeMapped}_${row.linkTien}`;
+      } else {
+        row.dienGiai = `${row.soHopDong}_${row.linkTien}`;
+      }
+    }
+
+    // Mã hợp đồng
+    if (!row.editedFields.includes('maHopDong')) {
+      row.maHopDong = row.soHopDong ? `${row.soHopDong}${config.suffixHopDong}` : '';
+    }
+
+    // Số chứng từ final
+    if (!row.editedFields.includes('soChungTuFinal')) {
+      row.soChungTuFinal = generateDocNumber(config.soChungTuBatDau, i);
+    }
+
+    // Mã quyển
+    const currentYear = new Date().getFullYear();
+    row.maQuyenFinal = `${config.tienToMaQuyen}${currentYear}`;
+  });
+
+  return rows;
 }

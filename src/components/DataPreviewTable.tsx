@@ -1,18 +1,17 @@
 import React, { useState } from 'react';
 import { ProcessedRow, ETLResult, ETLConfig } from '../types';
-import { AlertTriangle, Download, Search, CheckCircle2, ChevronRight, FileSpreadsheet, RefreshCw, XCircle, Edit2, Check } from 'lucide-react';
+import { AlertTriangle, Download, Search, CheckCircle2, ChevronRight, FileSpreadsheet, RefreshCw, XCircle, Edit2, Check, Info } from 'lucide-react';
 import { exportToAccountingExcel } from '../utils/etl';
 
 interface DataPreviewTableProps {
   etlResult: ETLResult;
   config: ETLConfig;
-  onExport: () => void;
-  onUpdateRow: (originalRow: ProcessedRow, updatedRow: ProcessedRow) => void;
+  onUpdateRow: (originalIndex: number, originalRow: ProcessedRow, updatedRow: ProcessedRow) => void;
 }
 
-export default function DataPreviewTable({ etlResult, config, onExport, onUpdateRow }: DataPreviewTableProps) {
+export default function DataPreviewTable({ etlResult, config, onUpdateRow }: DataPreviewTableProps) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState<'all' | 'warnings_only' | 'yellow' | 'red' | 'no_client'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'warnings_only' | 'yellow' | 'red' | 'no_client' | 'manual_edits'>('all');
   const [highlightDuplicates, setHighlightDuplicates] = useState(true);
 
   // Row Inline Edit State
@@ -29,8 +28,8 @@ export default function DataPreviewTable({ etlResult, config, onExport, onUpdate
     setEditForm({});
   };
 
-  const handleSaveEdit = (rowId: string) => {
-    const originalRow = processedRows.find(r => r.id === rowId);
+  const handleSaveEdit = (rowId: string, originalIndex: number) => {
+    const originalRow = processedRows[originalIndex];
     if (!originalRow) return;
 
     // Build the updated ProcessedRow object
@@ -39,16 +38,19 @@ export default function DataPreviewTable({ etlResult, config, onExport, onUpdate
       ...editForm,
     } as ProcessedRow;
 
-    onUpdateRow(originalRow, updatedRow);
+    onUpdateRow(originalIndex, originalRow, updatedRow);
     setEditingId(null);
     setEditForm({});
   };
 
   const { processedRows, warningsCount } = etlResult;
 
-  // Filter rows based on search and active tab
-  const filteredRows = processedRows.filter(row => {
-    // 1. Text Search matching
+  // Tạo wrapper rowsWithIndex chứa chỉ mục gốc
+  const rowsWithIndex = processedRows.map((row, originalIndex) => ({ row, originalIndex }));
+
+  // Lọc hàng dựa trên tìm kiếm và tab bộ lọc
+  const filteredRowsWithIndex = rowsWithIndex.filter(({ row }) => {
+    // 1. So khớp tìm kiếm văn bản
     const searchLow = searchTerm.toLowerCase();
     const matchSearch = 
       row.soHopDong.toLowerCase().includes(searchLow) ||
@@ -61,14 +63,23 @@ export default function DataPreviewTable({ etlResult, config, onExport, onUpdate
 
     if (!matchSearch) return false;
 
-    // 2. Tab Filter
+    // 2. Bộ lọc Tab
     if (activeTab === 'all') return true;
+    if (activeTab === 'manual_edits') return row.isManuallyEdited === true;
+
+    // Các bộ lọc lỗi/cảnh báo chỉ hiển thị các dòng CHƯA sửa tay (isManuallyEdited === false)
+    if (row.isManuallyEdited) return false;
+
     if (activeTab === 'warnings_only') {
-      return row.isYellowWarning || row.isRedWarning || row.maKhach.includes('Cảnh báo');
+      const isNoClient = row.maKhach.includes('Cảnh báo') || !row.maKhach || row.maKhach === '';
+      return row.isYellowWarning || row.isRedWarning || isNoClient;
     }
     if (activeTab === 'yellow') return row.isYellowWarning;
     if (activeTab === 'red') return row.isRedWarning;
-    if (activeTab === 'no_client') return row.maKhach.includes('Cảnh báo');
+    if (activeTab === 'no_client') {
+      const isNoClient = row.maKhach.includes('Cảnh báo') || !row.maKhach || row.maKhach === '';
+      return isNoClient;
+    }
 
     return true;
   });
@@ -138,6 +149,18 @@ export default function DataPreviewTable({ etlResult, config, onExport, onUpdate
             >
               Lệch tiền ({warningsCount.amountMismatch})
             </button>
+            <button
+              id="tab-manual-edits"
+              onClick={() => setActiveTab('manual_edits')}
+              className={`px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-all flex items-center gap-1 ${
+                activeTab === 'manual_edits' 
+                  ? 'bg-sky-600 text-white shadow-xs' 
+                  : 'bg-sky-50 text-sky-700 hover:bg-sky-100/70'
+              }`}
+            >
+              <Info className="w-3.5 h-3.5" />
+              Sửa tay ({etlResult.manualEditCount || 0})
+            </button>
           </div>
 
           <div className="flex items-center gap-2">
@@ -152,24 +175,20 @@ export default function DataPreviewTable({ etlResult, config, onExport, onUpdate
                 className="pl-9.5 pr-4.5 py-2 border border-gray-200 rounded-xl text-xs w-64 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500"
               />
             </div>
-            <button
-              id="btn-export-excel"
-              onClick={onExport}
-              className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white font-semibold text-xs py-2 px-4.5 rounded-xl cursor-pointer shadow-sm transition-all"
-            >
-              <Download className="w-4 h-4" />
-              Xuất file kế toán
-            </button>
           </div>
         </div>
 
         {/* Legend explanations */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-between bg-gray-50 border border-gray-100 rounded-xl p-4 mb-4 text-xs">
-          <div className="flex items-center gap-1 text-gray-500 font-medium">
+        <div className="flex flex-col gap-3 bg-gray-50 border border-gray-100 rounded-xl p-4 mb-4 text-xs">
+          <div className="flex items-center gap-1.5 text-gray-500 font-medium">
             <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
-            <span>Chú thích các màu hàng cảnh báo trên giao diện:</span>
+            <span className="font-semibold">Chú thích các màu hàng trên giao diện:</span>
           </div>
-          <div className="flex flex-wrap gap-4">
+          <div className="flex flex-wrap gap-x-6 gap-y-2">
+            <div className="flex items-center gap-1.5">
+              <span className="w-3.5 h-3.5 bg-sky-50 border border-sky-400 rounded-md shrink-0 block"></span>
+              <span className="text-gray-600">Người dùng sửa tay</span>
+            </div>
             <div className="flex items-center gap-1.5">
               <span className="w-3.5 h-3.5 bg-yellow-100 border border-yellow-200 rounded-md shrink-0 block"></span>
               <span className="text-gray-600">Chưa ghi nhận (Trong báo có ngân hàng)</span>
@@ -208,7 +227,7 @@ export default function DataPreviewTable({ etlResult, config, onExport, onUpdate
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 text-xs font-medium">
-              {filteredRows.length === 0 ? (
+              {filteredRowsWithIndex.length === 0 ? (
                 <tr>
                   <td colSpan={15} className="py-12 text-center text-gray-400 font-medium">
                     <XCircle className="w-8 h-8 mx-auto text-gray-300 mb-2" />
@@ -216,12 +235,14 @@ export default function DataPreviewTable({ etlResult, config, onExport, onUpdate
                   </td>
                 </tr>
               ) : (
-                filteredRows.map((row, i) => {
+                filteredRowsWithIndex.map(({ row, originalIndex }, i) => {
                   const isEditing = editingId === row.id;
 
-                  // Class styles depending on warnings
+                  // Kiểu hiển thị màu nền cho hàng tùy theo cảnh báo hoặc sửa tay
                   let rowBg = 'hover:bg-gray-50/50 text-gray-700';
-                  if (row.isRedWarning) {
+                  if (row.isManuallyEdited) {
+                    rowBg = 'bg-sky-50 text-sky-900 border-l-4 border-sky-400 hover:bg-sky-100/30';
+                  } else if (row.isRedWarning) {
                     rowBg = 'bg-red-50 text-red-900 border-l-4 border-red-500 hover:bg-rose-100/30';
                   } else if (row.isYellowWarning) {
                     rowBg = 'bg-yellow-50 text-amber-900 border-l-4 border-yellow-400 hover:bg-yellow-100/30';
@@ -245,12 +266,19 @@ export default function DataPreviewTable({ etlResult, config, onExport, onUpdate
                     <tr key={row.id} className={`transition-colors text-[11px] ${isEditing ? 'bg-blue-50/40 text-slate-900 ring-2 ring-blue-100 border-l-4 border-blue-500' : rowBg}`} id={`row-${i}`}>
                       {/* 1. STT */}
                       <td 
-                        className={`py-2 px-3.5 text-center select-none font-medium relative group ${hasErrors ? 'cursor-help' : 'text-gray-400'}`}
-                        title={hasErrors ? rowErrors.join('\n') : undefined}
+                        className={`py-2 px-3.5 text-center select-none font-medium relative group ${row.isManuallyEdited ? 'cursor-help text-sky-500' : hasErrors ? 'cursor-help' : 'text-gray-400'}`}
+                        title={row.isManuallyEdited ? "Người dùng sửa tay" : hasErrors ? rowErrors.join('\n') : undefined}
                       >
                         <div className="flex items-center justify-center gap-1">
                           <span>{i + 1}</span>
-                          {hasErrors && (
+                          {row.isManuallyEdited ? (
+                            <>
+                              <Info className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+                              <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 hidden group-hover:flex flex-col bg-slate-900 text-white text-[10px] rounded-lg py-2 px-3 z-50 shadow-xl border border-slate-700 pointer-events-none text-left leading-normal font-medium normal-case whitespace-nowrap">
+                                Người dùng sửa tay
+                              </div>
+                            </>
+                          ) : hasErrors && (
                             <>
                               <AlertTriangle 
                                 className={`w-3.5 h-3.5 shrink-0 ${
@@ -277,7 +305,7 @@ export default function DataPreviewTable({ etlResult, config, onExport, onUpdate
                           <div className="flex items-center justify-center gap-1.5">
                             <button
                               id={`save-btn-${row.id}`}
-                              onClick={() => handleSaveEdit(row.id)}
+                              onClick={() => handleSaveEdit(row.id, originalIndex)}
                               className="p-1 text-emerald-600 hover:bg-emerald-100 rounded-md transition-all cursor-pointer"
                               title="Lưu dòng"
                             >
@@ -528,7 +556,7 @@ export default function DataPreviewTable({ etlResult, config, onExport, onUpdate
 
         <div className="flex flex-col sm:flex-row items-center justify-between mt-5 gap-3">
           <div className="text-xs text-gray-400 font-medium">
-            Đang hiển thị <strong className="text-gray-700">{filteredRows.length}</strong> trong tổng số <strong className="text-gray-700">{processedRows.length}</strong> dòng báo có.
+            Đang hiển thị <strong className="text-gray-700">{filteredRowsWithIndex.length}</strong> trong tổng số <strong className="text-gray-700">{processedRows.length}</strong> dòng báo có.
           </div>
           <p className="text-[11px] text-gray-400 max-w-md hidden sm:block text-right leading-relaxed font-normal">
             * Cột Hợp đồng được tự động để trống cho các dòng chứa dữ liệu bảng kê theo nghiệp vụ kế toán quy định.

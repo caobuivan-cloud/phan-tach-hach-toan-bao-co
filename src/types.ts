@@ -22,6 +22,17 @@ export interface RawFile {
   rows: any[][];       // Rows after header
 }
 
+export type EditableProcessedRowField = keyof Pick<ProcessedRow, 
+  'maKhach' | 'soChungTuFinal' | 'ngayTienVe' | 'maGiaoDichFinal' |
+  'tienVe' | 'linkTien' | 'maNganHang' | 'soTienGhiCo' |
+  'bangKeMapped' | 'dienGiai' | 'maHopDong'
+>;
+
+export interface ManualEditState {
+  values: Partial<Pick<ProcessedRow, EditableProcessedRowField>>;
+  editedFields: EditableProcessedRowField[];
+}
+
 export interface ProcessedRow {
   id: string; // unique identifier
   
@@ -61,6 +72,10 @@ export interface ProcessedRow {
   maGiaoDichFinal: string; // usually config.maGiaoDich, changed to "3" if duplicate and Sum === ghi_co
   soChungTuFinal: string;
   maQuyenFinal: string;
+
+  // Manual Edit State
+  isManuallyEdited: boolean;
+  editedFields: EditableProcessedRowField[];
 }
 
 export interface ETLResult {
@@ -78,4 +93,5 @@ export interface ETLResult {
     notAcknowledged: number; // yellow status
     amountMismatch: number;  // red status
   };
+  manualEditCount: number;
 }
