@@ -15,6 +15,7 @@
 - Thêm tab "Sửa tay" và hiển thị dòng sửa tay với nền màu xanh da trời nhạt, biểu tượng `Info` ở cột STT kèm tooltip hiển thị "Người dùng sửa tay".
 - Bổ sung validation chặt chẽ khi xuất Excel hạch toán: ném lỗi ngoại lệ từ utility `etl.ts` và thực hiện `try-catch` tại `App.tsx` hiển thị thông báo alert đỏ chặn xuất file nếu còn chứa cảnh báo mã khách trống hoặc lỗi.
 - Bổ sung xác nhận `window.confirm` cảnh báo mất dữ liệu sửa tay khi tải tệp mới hoặc xóa tệp tin cũ.
+- Thêm fallback màu hex cho trình duyệt cũ không hỗ trợ `oklch` trong `src/index.css`.
 - Tinh chỉnh lại bố cục phần chú thích màu sắc: đưa tiêu đề Chú thích lên hàng riêng biệt phía trên và xếp ngang 4 hộp chú thích màu sắc gọn gàng ở hàng bên dưới.
 
 ## 2026-06-16
