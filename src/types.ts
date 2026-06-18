@@ -95,3 +95,8 @@ export interface ETLResult {
   };
   manualEditCount: number;
 }
+
+export interface ExportWarning {
+  type: 'noClientCode' | 'notAcknowledged' | 'amountMismatch';
+  message: string;
+}

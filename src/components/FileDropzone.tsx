@@ -39,15 +39,18 @@ export default function FileDropzone({ onFilesParsed, onClearFiles, onRemoveFile
     setErrorText(null);
     if (e.target.files && e.target.files.length > 0) {
       parseMultipleFiles(e.target.files);
+      // Reset input value to allow selecting same file again after deleting
+      e.target.value = '';
     }
   };
 
   const parseMultipleFiles = async (fileList: FileList) => {
+    const filesArray = Array.from(fileList);
     setParsingFiles(true);
     const parsedFiles: RawFile[] = [];
 
-    for (let i = 0; i < fileList.length; i++) {
-      const file = fileList[i];
+    for (let i = 0; i < filesArray.length; i++) {
+      const file = filesArray[i];
       const name = file.name;
       const size = file.size;
       
@@ -58,33 +61,114 @@ export default function FileDropzone({ onFilesParsed, onClearFiles, onRemoveFile
 
       try {
         const rawBytes = await readFileAsArrayBuffer(file);
-        const workbook = XLSX.read(rawBytes, { type: 'array', cellDates: true });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
+        const data = new Uint8Array(rawBytes);
+        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
         
-        // Read into nested grid format
-        const sheetData: any[][] = XLSX.utils.sheet_to_json(worksheet, { 
-          header: 1, 
-          defval: '',
-          raw: false // Let SheetJS format dates and numbers as strings
-        });
-
-        const { groupType, headerIndex } = detectFileGroup(sheetData);
-        
-        let headers: string[] = [];
-        if (headerIndex !== -1 && sheetData[headerIndex]) {
-          headers = sheetData[headerIndex].map(h => String(h || '').trim());
+        if (workbook.SheetNames.length === 0) {
+          continue;
         }
 
-        parsedFiles.push({
-          name,
-          size,
-          groupType,
-          headerIndex,
-          headers,
-          rows: sheetData
+        // 1. Đọc và chạy detectFileGroup trên sheet đầu tiên trước
+        const firstSheetName = workbook.SheetNames[0];
+        const firstWorksheet = workbook.Sheets[firstSheetName];
+        const firstSheetData: any[][] = XLSX.utils.sheet_to_json(firstWorksheet, { 
+          header: 1, 
+          defval: '',
+          raw: false
         });
-      } catch (err) {
+
+        const firstDetection = detectFileGroup(firstSheetData);
+        
+        // 2. Kiểm tra nếu sheet đầu tiên thuộc Nhóm 1, Nhóm 2 hoặc Nhóm 3
+        const isFirstSheetGroup123 = 
+          firstDetection.groupType === 'group1' || 
+          firstDetection.groupType === 'group2' || 
+          firstDetection.groupType === 'group3';
+
+        if (isFirstSheetGroup123) {
+          // Giữ nguyên hành vi cũ: chỉ nạp duy nhất sheet đầu tiên
+          let headers: string[] = [];
+          if (firstDetection.headerIndex !== -1 && firstSheetData[firstDetection.headerIndex]) {
+            headers = firstSheetData[firstDetection.headerIndex].map(h => String(h || '').trim());
+          }
+
+          parsedFiles.push({
+            name,
+            size,
+            groupType: firstDetection.groupType,
+            headerIndex: firstDetection.headerIndex,
+            headers,
+            rows: firstSheetData
+          });
+        } else {
+          // Sheet đầu không thuộc Nhóm 1/2/3: Quét các sheet còn lại của workbook
+          const tempSheets: { sheetName: string; sheetData: any[][]; groupType: FileGroup; headerIndex: number }[] = [];
+          
+          // Thêm thông tin sheet đầu tiên đã được parse sẵn
+          tempSheets.push({
+            sheetName: firstSheetName,
+            sheetData: firstSheetData,
+            groupType: firstDetection.groupType,
+            headerIndex: firstDetection.headerIndex
+          });
+
+          // Quét và parse các sheet tiếp theo
+          for (let s = 1; s < workbook.SheetNames.length; s++) {
+            const sheetName = workbook.SheetNames[s];
+            const worksheet = workbook.Sheets[sheetName];
+            const sheetData: any[][] = XLSX.utils.sheet_to_json(worksheet, { 
+              header: 1, 
+              defval: '',
+              raw: false
+            });
+            const detection = detectFileGroup(sheetData);
+            tempSheets.push({
+              sheetName,
+              sheetData,
+              groupType: detection.groupType,
+              headerIndex: detection.headerIndex
+            });
+          }
+
+          // Kiểm tra xem workbook có chứa ít nhất 1 sheet Nhóm 4 hay không
+          const hasGroup4Sheet = tempSheets.some(ts => ts.groupType === 'group4');
+
+          if (hasGroup4Sheet) {
+            // Bóc tách tất cả các sheet Nhóm 4 (bỏ qua sheet trống/rác/unknown)
+            const group4Sheets = tempSheets.filter(ts => ts.groupType === 'group4');
+            group4Sheets.forEach(gs => {
+              let headers: string[] = [];
+              if (gs.headerIndex !== -1 && gs.sheetData[gs.headerIndex]) {
+                headers = gs.sheetData[gs.headerIndex].map(h => String(h || '').trim());
+              }
+
+              parsedFiles.push({
+                name: `${name} - ${gs.sheetName}`,
+                size,
+                groupType: 'group4',
+                headerIndex: gs.headerIndex,
+                headers,
+                rows: gs.sheetData
+              });
+            });
+          } else {
+            // Fallback: Nếu không có sheet Nhóm 4, chỉ nạp duy nhất sheet đầu tiên dưới dạng file unknown
+            let headers: string[] = [];
+            if (firstDetection.headerIndex !== -1 && firstSheetData[firstDetection.headerIndex]) {
+              headers = firstSheetData[firstDetection.headerIndex].map(h => String(h || '').trim());
+            }
+
+            parsedFiles.push({
+              name,
+              size,
+              groupType: firstDetection.groupType,
+              headerIndex: firstDetection.headerIndex,
+              headers,
+              rows: firstSheetData
+            });
+          }
+        }
+      } catch (err: any) {
         console.error(`Error parsing file ${name}:`, err);
         setErrorText(`Lỗi khi đọc file "${name}". Xin vui lòng kiểm tra xem file có hợp lệ hay không.`);
       }

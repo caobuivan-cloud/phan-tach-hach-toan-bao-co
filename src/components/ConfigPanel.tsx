@@ -77,7 +77,7 @@ export default function ConfigPanel({ onConfigChange, sheetsConfig, onSheetsConf
               bankMappings: fetched
             };
             localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
-            onConfigChange(updated);
+            setTimeout(() => onConfigChange(updated), 0);
             return updated;
           });
         }

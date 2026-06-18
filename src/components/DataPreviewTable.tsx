@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ProcessedRow, ETLResult, ETLConfig } from '../types';
 import { AlertTriangle, Download, Search, CheckCircle2, ChevronRight, FileSpreadsheet, RefreshCw, XCircle, Edit2, Check, Info } from 'lucide-react';
-import { exportToAccountingExcel } from '../utils/etl';
+import { exportToAccountingExcel, getRowExportWarnings } from '../utils/etl';
 
 interface DataPreviewTableProps {
   etlResult: ETLResult;
@@ -67,18 +67,19 @@ export default function DataPreviewTable({ etlResult, config, onUpdateRow }: Dat
     if (activeTab === 'all') return true;
     if (activeTab === 'manual_edits') return row.isManuallyEdited === true;
 
-    // Các bộ lọc lỗi/cảnh báo chỉ hiển thị các dòng CHƯA sửa tay (isManuallyEdited === false)
-    if (row.isManuallyEdited) return false;
+    const warnings = getRowExportWarnings(row);
 
     if (activeTab === 'warnings_only') {
-      const isNoClient = row.maKhach.includes('Cảnh báo') || !row.maKhach || row.maKhach === '';
-      return row.isYellowWarning || row.isRedWarning || isNoClient;
+      return warnings.length > 0;
     }
-    if (activeTab === 'yellow') return row.isYellowWarning;
-    if (activeTab === 'red') return row.isRedWarning;
+    if (activeTab === 'yellow') {
+      return warnings.some(w => w.type === 'notAcknowledged');
+    }
+    if (activeTab === 'red') {
+      return warnings.some(w => w.type === 'amountMismatch');
+    }
     if (activeTab === 'no_client') {
-      const isNoClient = row.maKhach.includes('Cảnh báo') || !row.maKhach || row.maKhach === '';
-      return isNoClient;
+      return warnings.some(w => w.type === 'noClientCode');
     }
 
     return true;
@@ -248,53 +249,55 @@ export default function DataPreviewTable({ etlResult, config, onUpdateRow }: Dat
                     rowBg = 'bg-yellow-50 text-amber-900 border-l-4 border-yellow-400 hover:bg-yellow-100/30';
                   }
 
-                  const isNoClient = row.maKhach.includes('Cảnh báo') || !row.maKhach || row.maKhach === '';
-
-                  const rowErrors: string[] = [];
-                  if (isNoClient) {
-                    rowErrors.push('Cảnh báo không tìm thấy Mã khách');
-                  }
-                  if (row.isYellowWarning) {
-                    rowErrors.push('Chưa ghi nhận (Trong báo có ngân hàng)');
-                  }
-                  if (row.isRedWarning) {
-                    rowErrors.push('Trùng Link tiền + Lệch tiền với ghi có');
-                  }
-                  const hasErrors = rowErrors.length > 0;
+                  const rowWarnings = getRowExportWarnings(row);
+                  const hasErrors = rowWarnings.length > 0;
+                  const rowErrors = rowWarnings.map(w => w.message);
+                  const isNoClient = rowWarnings.some(w => w.type === 'noClientCode');
 
                   return (
                     <tr key={row.id} className={`transition-colors text-[11px] ${isEditing ? 'bg-blue-50/40 text-slate-900 ring-2 ring-blue-100 border-l-4 border-blue-500' : rowBg}`} id={`row-${i}`}>
                       {/* 1. STT */}
                       <td 
                         className={`py-2 px-3.5 text-center select-none font-medium relative group ${row.isManuallyEdited ? 'cursor-help text-sky-500' : hasErrors ? 'cursor-help' : 'text-gray-400'}`}
-                        title={row.isManuallyEdited ? "Người dùng sửa tay" : hasErrors ? rowErrors.join('\n') : undefined}
+                        title={(() => {
+                          const parts = [];
+                          if (row.isManuallyEdited) parts.push("Người dùng sửa tay");
+                          if (hasErrors) parts.push(...rowErrors);
+                          return parts.join('\n');
+                        })()}
                       >
                         <div className="flex items-center justify-center gap-1">
                           <span>{i + 1}</span>
-                          {row.isManuallyEdited ? (
-                            <>
-                              <Info className="w-3.5 h-3.5 text-sky-500 shrink-0" />
-                              <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 hidden group-hover:flex flex-col bg-slate-900 text-white text-[10px] rounded-lg py-2 px-3 z-50 shadow-xl border border-slate-700 pointer-events-none text-left leading-normal font-medium normal-case whitespace-nowrap">
-                                Người dùng sửa tay
-                              </div>
-                            </>
-                          ) : hasErrors && (
-                            <>
-                              <AlertTriangle 
-                                className={`w-3.5 h-3.5 shrink-0 ${
-                                  row.isRedWarning || isNoClient ? 'text-red-500' : 'text-yellow-500'
-                                }`} 
-                              />
-                              <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 hidden group-hover:flex flex-col gap-1 bg-slate-900 text-white text-[10px] rounded-lg py-2 px-3 z-50 shadow-xl border border-slate-700 pointer-events-none min-w-[220px] text-left leading-normal font-medium normal-case">
-                                <div className="font-bold text-[9px] text-slate-400 uppercase tracking-wider mb-0.5">Chi tiết lỗi/cảnh báo:</div>
-                                {rowErrors.map((err, idx) => (
-                                  <div key={idx} className="flex items-start gap-1.5">
-                                    <span className={`w-1.5 h-1.5 rounded-full mt-1 shrink-0 ${err.includes('Mã khách') || err.includes('Lệch tiền') ? 'bg-red-500' : 'bg-yellow-500'}`}></span>
-                                    <span>{err}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </>
+                          {row.isManuallyEdited && (
+                            <Info className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+                          )}
+                          {hasErrors && (
+                            <AlertTriangle 
+                              className={`w-3.5 h-3.5 shrink-0 ${
+                                rowWarnings.some(w => w.type === 'noClientCode' || w.type === 'amountMismatch') 
+                                  ? 'text-red-500' 
+                                  : 'text-yellow-500'
+                              }`} 
+                            />
+                          )}
+                          
+                          {(row.isManuallyEdited || hasErrors) && (
+                            <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 hidden group-hover:flex flex-col gap-1 bg-slate-900 text-white text-[10px] rounded-lg py-2 px-3 z-50 shadow-xl border border-slate-700 pointer-events-none min-w-[220px] text-left leading-normal font-medium normal-case">
+                              {row.isManuallyEdited && (
+                                <div className="font-bold text-[9px] text-sky-400 uppercase tracking-wider mb-0.5">Trạng thái: Người dùng sửa tay</div>
+                              )}
+                              {hasErrors && (
+                                <>
+                                  <div className="font-bold text-[9px] text-slate-400 uppercase tracking-wider mb-0.5 mt-1">Chi tiết lỗi/cảnh báo:</div>
+                                  {rowErrors.map((err, idx) => (
+                                    <div key={idx} className="flex items-start gap-1.5">
+                                      <span className={`w-1.5 h-1.5 rounded-full mt-1 shrink-0 ${err.includes('Mã khách') || err.includes('Lệch tiền') ? 'bg-red-500' : 'bg-yellow-500'}`}></span>
+                                      <span>{err}</span>
+                                    </div>
+                                  ))}
+                                </>
+                              )}
+                            </div>
                           )}
                         </div>
                       </td>

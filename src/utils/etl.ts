@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { RawFile, FileGroup, ETLConfig, ProcessedRow, ETLResult, ManualEditState } from '../types';
+import { RawFile, FileGroup, ETLConfig, ProcessedRow, ETLResult, ManualEditState, ExportWarning } from '../types';
 
 // Helper to sanitize and normalize text for robust matching
 export function cleanString(val: any): string {
@@ -386,39 +386,41 @@ export function runETLPipeline(files: RawFile[], config: ETLConfig): ETLResult {
  * Convert mapped row data into the specified 21-column Excel output layout.
  */
 export function exportToAccountingExcel(rows: ProcessedRow[], config: ETLConfig) {
-  // Validate rows (including manually edited ones)
-  rows.forEach((row, i) => {
-    if (!row.maKhach || row.maKhach.trim() === '' || row.maKhach.includes('Cảnh báo')) {
-      throw new Error(`Dòng thứ ${i + 1} có Mã khách không hợp lệ: "${row.maKhach}". Vui lòng sửa lại mã khách trước khi xuất.`);
-    }
-  });
+  // Check if there are any warnings in the rows
+  const hasWarnings = rows.some(row => getRowExportWarnings(row).length > 0);
 
   // Title row: "Import phiếu báo có" at A1
+  const headerRow = [
+    'ĐVCS',
+    'Mã khách',
+    'Người nhận tiền',
+    'Lý do nộp',
+    'Tài khoản', // Header is labeled "Tài khoản", maps to bank accounts
+    'Mã giao dịch',
+    'Số chứng từ',
+    'Ngày chứng từ',
+    'Mã ngoại tệ',
+    'Tỷ giá',
+    'Tk có',
+    'Mã khách', // 12. Mã khách ct (labeled Mã khách in Image 5)
+    'Tiền nt',
+    'Tiền',
+    'Diễn giải',
+    'Vụ việc',
+    'Bộ phận',
+    'Hợp đồng',
+    'Bảng kê',
+    'TD2',
+    'Mã quyển'
+  ];
+
+  if (hasWarnings) {
+    headerRow.push('Cảnh báo lỗi');
+  }
+
   const rawData: any[][] = [
     ['Import phiếu báo có'], // Row 1
-    [ // Row 2 (Header)
-      'ĐVCS',
-      'Mã khách',
-      'Người nhận tiền',
-      'Lý do nộp',
-      'Tài khoản', // Header is labeled "Tài khoản", maps to bank accounts
-      'Mã giao dịch',
-      'Số chứng từ',
-      'Ngày chứng từ',
-      'Mã ngoại tệ',
-      'Tỷ giá',
-      'Tk có',
-      'Mã khách', // 12. Mã khách ct (labeled Mã khách in Image 5)
-      'Tiền nt',
-      'Tiền',
-      'Diễn giải',
-      'Vụ việc',
-      'Bộ phận',
-      'Hợp đồng',
-      'Bảng kê',
-      'TD2',
-      'Mã quyển'
-    ]
+    headerRow // Row 2 (Header)
   ];
 
   // Map each processed record from Row 3 onwards
@@ -449,7 +451,7 @@ export function exportToAccountingExcel(rows: ProcessedRow[], config: ETLConfig)
     const isBangKePresent = row.bangKeMapped && row.bangKeMapped.trim() !== '';
     const hopDongColVal = isBangKePresent ? '' : row.maHopDong;
 
-    rawData.push([
+    const rowCells = [
       config.dvcs,               // 1. ĐVCS
       row.maKhach,               // 2. Mã khách
       '',                        // 3. Người nhận tiền (blank)
@@ -471,7 +473,14 @@ export function exportToAccountingExcel(rows: ProcessedRow[], config: ETLConfig)
       row.bangKeMapped,          // 19. Bảng kê
       '',                        // 20. TD2 (blank)
       row.maQuyenFinal           // 21. Mã quyển
-    ]);
+    ];
+
+    if (hasWarnings) {
+      const rowWarnings = getRowExportWarnings(row);
+      rowCells.push(rowWarnings.map(w => w.message).join(', '));
+    }
+
+    rawData.push(rowCells);
   });
 
   // Create workspace worksheet
@@ -501,6 +510,10 @@ export function exportToAccountingExcel(rows: ProcessedRow[], config: ETLConfig)
     { wch: 10 }, // TD2
     { wch: 15 }  // Mã quyển
   ];
+
+  if (hasWarnings) {
+    defaultColWidths.push({ wch: 35 }); // Cảnh báo lỗi
+  }
   ws['!cols'] = defaultColWidths;
 
   const wb = XLSX.utils.book_new();
@@ -508,6 +521,23 @@ export function exportToAccountingExcel(rows: ProcessedRow[], config: ETLConfig)
 
   // Generate binary buffer download
   XLSX.writeFile(wb, 'import_phieu_bao_co.xlsx');
+}
+
+/**
+ * Helper to get all warnings for a processed row
+ */
+export function getRowExportWarnings(row: ProcessedRow): ExportWarning[] {
+  const warnings: ExportWarning[] = [];
+  if (!row.maKhach || row.maKhach.trim() === '' || row.maKhach.includes('Cảnh báo')) {
+    warnings.push({ type: 'noClientCode', message: 'Cảnh báo không tìm thấy Mã khách' });
+  }
+  if (row.isYellowWarning) {
+    warnings.push({ type: 'notAcknowledged', message: 'Chưa ghi nhận (Trong báo có ngân hàng)' });
+  }
+  if (row.isRedWarning) {
+    warnings.push({ type: 'amountMismatch', message: 'Trùng Link tiền + Lệch tiền với ghi có' });
+  }
+  return warnings;
 }
 
 /**
@@ -523,18 +553,12 @@ export function deriveWarningsCount(rows: ProcessedRow[]): {
   let amountMismatch = 0;
 
   rows.forEach(row => {
-    if (row.isManuallyEdited) {
-      return; // Dòng đã sửa tay được xem là đã xử lý và bị loại bỏ khỏi unresolved warning để đồng bộ UI
-    }
-    if (!row.maKhach || row.maKhach.trim() === '' || row.maKhach.includes('Cảnh báo')) {
-      noClientCode++;
-    }
-    if (row.isYellowWarning) {
-      notAcknowledged++;
-    }
-    if (row.isRedWarning) {
-      amountMismatch++;
-    }
+    const warnings = getRowExportWarnings(row);
+    warnings.forEach(w => {
+      if (w.type === 'noClientCode') noClientCode++;
+      else if (w.type === 'notAcknowledged') notAcknowledged++;
+      else if (w.type === 'amountMismatch') amountMismatch++;
+    });
   });
 
   return {

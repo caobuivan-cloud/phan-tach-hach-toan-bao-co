@@ -18,6 +18,7 @@ export default function App() {
   const [etlResult, setEtlResult] = useState<ETLResult | null>(null);
   const [manualEdits, setManualEdits] = useState<Record<number, ManualEditState>>({});
   const [exportSuccess, setExportSuccess] = useState(false);
+  const [exportedWithWarnings, setExportedWithWarnings] = useState(false);
   const [currentTime, setCurrentTime] = useState('2026-06-15 21:06:34');
   const [showTutorial, setShowTutorial] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -153,11 +154,23 @@ export default function App() {
   const handleExport = () => {
     if (!etlResult || etlResult.processedRows.length === 0 || !config) return;
     
+    // Check if there are active warnings in the exported rows
+    const warningsCount = etlResult.warningsCount;
+    const hasWarnings = (warningsCount.noClientCode + warningsCount.notAcknowledged + warningsCount.amountMismatch) > 0;
+
+    if (hasWarnings) {
+      const ok = window.confirm(
+        "Dữ liệu kết xuất hiện vẫn còn tồn tại lỗi nghiệp vụ chưa được xử lý. Bạn có chắc chắn muốn xuất tệp Excel kế toán kèm theo cột Cảnh báo lỗi?"
+      );
+      if (!ok) return;
+    }
+
     try {
       // Call SheetJS exporter helper
       exportToAccountingExcel(etlResult.processedRows, config);
       
       // Show success banner
+      setExportedWithWarnings(hasWarnings);
       setExportSuccess(true);
       setTimeout(() => setExportSuccess(false), 5000);
       
@@ -334,7 +347,10 @@ export default function App() {
               <div>
                 <p>Khởi tạo và kết xuất File thành công!</p>
                 <p className="font-normal opacity-85 text-xs mt-0.5">
-                  File "import_phieu_bao_co.xlsx" đã được kết xuất và tự động lưu với cấu trúc 21 cột tiêu chuẩn đáp ứng quy chuẩn kế toán.
+                  {exportedWithWarnings 
+                    ? 'File "import_phieu_bao_co.xlsx" đã được kết xuất thành công kèm theo cột Cảnh báo lỗi thứ 22.'
+                    : 'File "import_phieu_bao_co.xlsx" đã được kết xuất thành công với cấu trúc 21 cột tiêu chuẩn.'
+                  }
                 </p>
               </div>
             </div>
