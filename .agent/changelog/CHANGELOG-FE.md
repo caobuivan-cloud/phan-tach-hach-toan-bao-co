@@ -6,6 +6,19 @@
 
 ---
 
+## 2026-06-18
+
+### fix(modal): thay thế confirm/alert bằng custom modal để sửa lỗi chặn sandbox iframe
+- Giải quyết lỗi chặn cuộc gọi hộp thoại hệ thống `window.confirm()` và `window.alert()` khi chạy trong môi trường iframe sandbox của trang portal (do thiếu từ khóa `allow-modals`).
+- Xây dựng Custom React Modal (`confirmModal` state) hiển thị hộp thoại xác nhận chuyên nghiệp, đồng bộ với thiết kế Tailwind CSS v4, được tích hợp cho các hành động xóa tất cả file, xóa từng file, đặt lại cấu hình mặc định, và xuất file chứa cảnh báo lỗi nghiệp vụ.
+
+### feat(dropzone): sửa lỗi tải nhiều file chỉ nhận 1 file & cho phép nhóm 4 tải file nhiều sheet & nâng cấp xuất cảnh báo Excel
+- Bóc tách đa sheet (multi-sheet) đối với file thuộc Nhóm 4 (Danh mục hợp đồng), chuyển đổi các sheet độc lập thành từng file Nhóm 4 riêng biệt trong danh sách, giữ nguyên hành vi đơn sheet cho Nhóm 1, 2, 3.
+- Sửa lỗi tải nhiều file đồng thời chỉ nhận được 1 file bằng cách sao chép đối tượng `Array.from(fileList)` để bảo vệ trước live mutation của input DOM.
+- Sửa lỗi nạp file chứa định dạng có điều kiện (conditional formatting) gây crash SheetJS bằng cách sử dụng `new Uint8Array(rawBytes)`.
+- Cải tiến hàm xuất Excel `exportToAccountingExcel` để không ném lỗi trực tiếp mà thêm cột động thứ 22 ("Cảnh báo lỗi") nếu dữ liệu kết xuất còn lỗi nghiệp vụ. Nếu sạch lỗi, giữ nguyên 21 cột.
+- Đồng bộ hóa cảnh báo ở `DataPreviewTable.tsx` để tooltip hiển thị gộp cảnh báo nghiệp vụ và nhãn sửa tay, đồng thời hiển thị tab Cảnh báo chính xác dựa trên danh sách cảnh báo nghiệp vụ đầy đủ.
+
 ## 2026-06-17
 
 ### feat: hoàn thành cảnh báo và bộ lọc khi người dùng sửa tay (v7) và chú thích màu giao diện
