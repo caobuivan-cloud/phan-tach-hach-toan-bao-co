@@ -24,6 +24,36 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [sheetsConfig, setSheetsConfig] = useState<SheetsConfig>(loadSheetsConfig());
 
+  // Custom confirm modal state
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    onCancel?: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
+
+  const showConfirm = (title: string, message: string, onConfirm: () => void, onCancel?: () => void) => {
+    setConfirmModal({
+      isOpen: true,
+      title,
+      message,
+      onConfirm: () => {
+        onConfirm();
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+      },
+      onCancel: () => {
+        if (onCancel) onCancel();
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+      }
+    });
+  };
+
   // Baseline thô từ files và config
   const rawResult = useMemo(() => {
     if (files.length > 0 && config) {
@@ -106,49 +136,78 @@ export default function App() {
     const filteredNew = newFiles.filter(nf => !files.some(pf => pf.name === nf.name));
     if (filteredNew.length === 0) return;
 
-    if (Object.keys(manualEdits).length > 0) {
-      const ok = window.confirm("Cấu hình tệp tin thay đổi sẽ làm mất toàn bộ các chỉnh sửa tay hiện có. Bạn có chắc chắn muốn tiếp tục?");
-      if (!ok) return;
-      setManualEdits({});
-    }
+    const proceedWithFiles = () => {
+      setFiles((prev) => [...prev, ...filteredNew]);
+      filteredNew.forEach(f => {
+        let groupName = "Không xác định";
+        if (f.groupType === "group1") groupName = "Tiền về (Nhóm 1)";
+        else if (f.groupType === "group2") groupName = "Báo có ngân hàng (Nhóm 2)";
+        else if (f.groupType === "group3") groupName = "Mã bảng kê (Nhóm 3)";
+        else if (f.groupType === "group4") groupName = "Danh mục hợp đồng (Nhóm 4)";
+        
+        logUserActionOnSheets(
+          "Tải file đối soát",
+          `Tải thành công file đối soát "${f.name}" thuộc nhóm: ${groupName} (${f.rows.length} dòng)`
+        );
+      });
+    };
 
-    setFiles((prev) => [...prev, ...filteredNew]);
-    filteredNew.forEach(f => {
-      let groupName = "Không xác định";
-      if (f.groupType === "group1") groupName = "Tiền về (Nhóm 1)";
-      else if (f.groupType === "group2") groupName = "Báo có ngân hàng (Nhóm 2)";
-      else if (f.groupType === "group3") groupName = "Mã bảng kê (Nhóm 3)";
-      else if (f.groupType === "group4") groupName = "Danh mục hợp đồng (Nhóm 4)";
-      
-      logUserActionOnSheets(
-        "Tải file đối soát",
-        `Tải thành công file đối soát "${f.name}" thuộc nhóm: ${groupName} (${f.rows.length} dòng)`
+    if (Object.keys(manualEdits).length > 0) {
+      showConfirm(
+        "Thay đổi cấu hình tệp tin",
+        "Cấu hình tệp tin thay đổi sẽ làm mất toàn bộ các chỉnh sửa tay hiện có. Bạn có chắc chắn muốn tiếp tục?",
+        () => {
+          setManualEdits({});
+          proceedWithFiles();
+        }
       );
-    });
+    } else {
+      proceedWithFiles();
+    }
   };
 
   const handleClearFiles = () => {
+    const proceedWithClear = () => {
+      setFiles([]);
+      setEtlResult(null);
+      logUserActionOnSheets("Xóa danh sách file", "Đã xóa toàn bộ danh sách file đối soát hiện tại");
+    };
+
     if (Object.keys(manualEdits).length > 0) {
-      const ok = window.confirm("Xóa toàn bộ danh sách tệp tin sẽ làm mất các chỉnh sửa tay hiện có. Bạn có chắc chắn muốn tiếp tục?");
-      if (!ok) return;
-      setManualEdits({});
+      showConfirm(
+        "Xóa toàn bộ tệp tin",
+        "Xóa toàn bộ danh sách tệp tin sẽ làm mất các chỉnh sửa tay hiện có. Bạn có chắc chắn muốn tiếp tục?",
+        () => {
+          setManualEdits({});
+          proceedWithClear();
+        }
+      );
+    } else {
+      proceedWithClear();
     }
-    setFiles([]);
-    setEtlResult(null);
-    logUserActionOnSheets("Xóa danh sách file", "Đã xóa toàn bộ danh sách file đối soát hiện tại");
   };
 
   const handleRemoveFile = (index: number) => {
+    const proceedWithRemove = () => {
+      const removedFile = files[index];
+      if (removedFile) {
+        logUserActionOnSheets("Xóa file đối soát", `Đã xóa file "${removedFile.name}" khỏi danh sách`);
+      }
+      setFiles((prev) => prev.filter((_, idx) => idx !== index));
+    };
+
     if (Object.keys(manualEdits).length > 0) {
-      const ok = window.confirm("Thay đổi danh sách tệp tin sẽ làm mất toàn bộ các chỉnh sửa tay hiện có. Bạn có chắc chắn muốn tiếp tục?");
-      if (!ok) return;
-      setManualEdits({});
+      showConfirm(
+        "Xóa tệp tin khỏi danh sách",
+        "Thay đổi danh sách tệp tin sẽ làm mất toàn bộ các chỉnh sửa tay hiện có. Bạn có chắc chắn muốn tiếp tục?",
+        () => {
+          setManualEdits({});
+          proceedWithRemove();
+        }
+      );
+    } else {
+      proceedWithRemove();
     }
-    const removedFile = files[index];
-    if (removedFile) {
-      logUserActionOnSheets("Xóa file đối soát", `Đã xóa file "${removedFile.name}" khỏi danh sách`);
-    }
-    setFiles((prev) => prev.filter((_, idx) => idx !== index));
   };
 
   const handleExport = () => {
@@ -158,29 +217,38 @@ export default function App() {
     const warningsCount = etlResult.warningsCount;
     const hasWarnings = (warningsCount.noClientCode + warningsCount.notAcknowledged + warningsCount.amountMismatch) > 0;
 
-    if (hasWarnings) {
-      const ok = window.confirm(
-        "Dữ liệu kết xuất hiện vẫn còn tồn tại lỗi nghiệp vụ chưa được xử lý. Bạn có chắc chắn muốn xuất tệp Excel kế toán kèm theo cột Cảnh báo lỗi?"
-      );
-      if (!ok) return;
-    }
+    const proceedWithExport = () => {
+      try {
+        // Call SheetJS exporter helper
+        exportToAccountingExcel(etlResult.processedRows, config);
+        
+        // Show success banner
+        setExportedWithWarnings(hasWarnings);
+        setExportSuccess(true);
+        setTimeout(() => setExportSuccess(false), 5000);
+        
+        logUserActionOnSheets(
+          "Xuất file kế toán",
+          `Xuất thành công File kế toán dạng Excel chứa ${etlResult.processedRows.length} dòng chứng từ đã đối chiếu`
+        );
+      } catch (err: any) {
+        console.error("Lỗi xuất file Excel:", err);
+        showConfirm(
+          "Lỗi kết xuất Excel",
+          err.message || "Xuất file Excel thất bại!",
+          () => {}
+        );
+      }
+    };
 
-    try {
-      // Call SheetJS exporter helper
-      exportToAccountingExcel(etlResult.processedRows, config);
-      
-      // Show success banner
-      setExportedWithWarnings(hasWarnings);
-      setExportSuccess(true);
-      setTimeout(() => setExportSuccess(false), 5000);
-      
-      logUserActionOnSheets(
-        "Xuất file kế toán",
-        `Xuất thành công File kế toán dạng Excel chứa ${etlResult.processedRows.length} dòng chứng từ đã đối chiếu`
+    if (hasWarnings) {
+      showConfirm(
+        "Dữ liệu xuất còn lỗi nghiệp vụ",
+        "Dữ liệu kết xuất hiện vẫn còn tồn tại lỗi nghiệp vụ chưa được xử lý. Bạn có chắc chắn muốn xuất tệp Excel kế toán kèm theo cột Cảnh báo lỗi?",
+        proceedWithExport
       );
-    } catch (err: any) {
-      console.error("Lỗi xuất file Excel:", err);
-      alert(err.message || "Xuất file Excel thất bại!");
+    } else {
+      proceedWithExport();
     }
   };
 
@@ -270,6 +338,7 @@ export default function App() {
               setSheetsConfig(sConf);
               saveSheetsConfig(sConf);
             }}
+            showConfirm={showConfirm}
           />
         </div>
       </aside>
@@ -485,6 +554,42 @@ export default function App() {
         </footer>
 
       </main>
+
+      {/* React custom confirmation modal */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-[9999] animate-fade-in" id="custom-confirm-modal">
+          <div className="bg-white rounded-2xl border border-slate-150 shadow-2xl max-w-md w-full overflow-hidden transform scale-[1.01] transition-all p-6 space-y-4">
+            <div className="flex items-start gap-4">
+              <div className="p-2.5 bg-amber-50 text-amber-600 rounded-full shrink-0">
+                <AlertTriangle className="w-5 h-5 text-amber-500" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-slate-800 font-bold text-sm tracking-tight">{confirmModal.title}</h3>
+                <p className="text-slate-500 text-xs leading-relaxed whitespace-pre-line">{confirmModal.message}</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={confirmModal.onCancel || confirmModal.onConfirm}
+                className="px-4 py-2 hover:bg-slate-50 border border-slate-200 text-slate-600 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
+              >
+                {confirmModal.onCancel ? "Hủy bỏ" : "Đóng"}
+              </button>
+              {confirmModal.onCancel && (
+                <button
+                  type="button"
+                  onClick={confirmModal.onConfirm}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold cursor-pointer transition-colors shadow-sm"
+                >
+                  Xác nhận
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

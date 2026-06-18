@@ -28,9 +28,10 @@ interface ConfigPanelProps {
   onConfigChange: (config: ETLConfig) => void;
   sheetsConfig: SheetsConfig;
   onSheetsConfigChange: (config: SheetsConfig) => void;
+  showConfirm?: (title: string, message: string, onConfirm: () => void) => void;
 }
 
-export default function ConfigPanel({ onConfigChange, sheetsConfig, onSheetsConfigChange }: ConfigPanelProps) {
+export default function ConfigPanel({ onConfigChange, sheetsConfig, onSheetsConfigChange, showConfirm }: ConfigPanelProps) {
   const [config, setConfig] = useState<ETLConfig>(DEFAULT_CONFIG);
   const [newBank, setNewBank] = useState('');
   const [newAccount, setNewAccount] = useState('');
@@ -144,13 +145,25 @@ export default function ConfigPanel({ onConfigChange, sheetsConfig, onSheetsConf
   };
 
   const handleReset = () => {
-    if (window.confirm('Bạn có chắc chắn muốn đặt lại toàn bộ cấu hình về mặc định không?')) {
+    const proceedWithReset = () => {
       saveConfig(DEFAULT_CONFIG);
 
       // Sync to Google Sheet (asynchronous)
       if (sheetsConfig.webAppUrl) {
         pushBankMappingsToGoogleSheet(sheetsConfig.webAppUrl, DEFAULT_CONFIG.bankMappings, sheetsConfig.userName)
           .catch(err => console.error("Failed to sync default bank mappings:", err));
+      }
+    };
+
+    if (showConfirm) {
+      showConfirm(
+        "Đặt lại cấu hình",
+        "Bạn có chắc chắn muốn đặt lại toàn bộ cấu hình về mặc định không?",
+        proceedWithReset
+      );
+    } else {
+      if (window.confirm('Bạn có chắc chắn muốn đặt lại toàn bộ cấu hình về mặc định không?')) {
+        proceedWithReset();
       }
     }
   };
