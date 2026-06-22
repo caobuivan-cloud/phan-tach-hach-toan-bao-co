@@ -428,21 +428,26 @@ export function exportToAccountingExcel(rows: ProcessedRow[], config: ETLConfig)
     // Dictionary resolution for "Mã ngân hàng -> Tài khoản nợ" (Col E)
     // Trim banks check
     const bankKey = cleanString(row.maNganHang);
-    let mappedAccount = '112130'; // fallback default
+    // Nếu không có maNganHang hoặc không tìm được mapping -> để trống (#N/A trong Excel)
+    let mappedAccount: string | null = null;
     
-    // Check if custom user mapping exists
-    const userMapKeys = Object.keys(config.bankMappings);
-    const matchedKey = userMapKeys.find(k => cleanString(k) === bankKey);
-    if (matchedKey) {
-      mappedAccount = config.bankMappings[matchedKey];
-    } else {
-      // default matching guess logic
-      if (bankKey.includes('vcb') || bankKey.includes('vietcombank')) mappedAccount = '112130';
-      else if (bankKey.includes('bidv')) mappedAccount = '112130';
-      else if (bankKey.includes('tcb') || bankKey.includes('techcombank')) mappedAccount = '112150';
-      else if (bankKey.includes('acb')) mappedAccount = '112120';
-      else if (bankKey.includes('mb') || bankKey.includes('mbbank')) mappedAccount = '112140';
+    if (bankKey !== '') {
+      // Check if custom user mapping exists
+      const userMapKeys = Object.keys(config.bankMappings);
+      const matchedKey = userMapKeys.find(k => cleanString(k) === bankKey);
+      if (matchedKey) {
+        mappedAccount = config.bankMappings[matchedKey];
+      } else {
+        // built-in matching guess logic
+        if (bankKey.includes('vcb') || bankKey.includes('vietcombank')) mappedAccount = '112130';
+        else if (bankKey.includes('bidv')) mappedAccount = '112130';
+        else if (bankKey.includes('tcb') || bankKey.includes('techcombank')) mappedAccount = '112150';
+        else if (bankKey.includes('acb')) mappedAccount = '112120';
+        else if (bankKey.includes('mb') || bankKey.includes('mbbank')) mappedAccount = '112140';
+        // else: không nhận ra ngân hàng -> giữ null => #N/A
+      }
     }
+    // mappedAccount === null => ghi #N/A vào Excel
 
     // Tiền calculation: Tiền nt * Tỷ giá
     const tienCalc = row.tienVe * config.tyGia;
@@ -456,7 +461,7 @@ export function exportToAccountingExcel(rows: ProcessedRow[], config: ETLConfig)
       row.maKhach,               // 2. Mã khách
       '',                        // 3. Người nhận tiền (blank)
       row.linkTien,              // 4. Lý do nộp (Link tiền - Col H of Nhóm 1)
-      mappedAccount,             // 5. Tài khoản (Tài khoản nợ)
+      mappedAccount !== null ? mappedAccount : '#N/A', // 5. Tài khoản nợ: null -> #N/A (chuỗi, tương thích XLS)
       row.maGiaoDichFinal,       // 6. Mã giao dịch
       row.soChungTuFinal,        // 7. Số chứng từ
       row.ngayTienVe,            // 8. Ngày chứng từ
@@ -520,7 +525,7 @@ export function exportToAccountingExcel(rows: ProcessedRow[], config: ETLConfig)
   XLSX.utils.book_append_sheet(wb, ws, 'Import Phieu Bao Co');
 
   // Generate binary buffer download
-  XLSX.writeFile(wb, 'import_phieu_bao_co.xlsx');
+  XLSX.writeFile(wb, 'import_phieu_bao_co.xls', { bookType: 'xls' });
 }
 
 /**
